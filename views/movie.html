@@ -1,0 +1,107 @@
+{{ block "index" .}}
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Movie database</title>
+        <link rel="icon" type="image/x-icon" href="/static/favicon.png">
+        <link href="/static/style.css" rel="stylesheet">
+        <script src="/static/htmx/htmx.min.js"></script>
+
+    </head>
+
+    <body>
+        <nav class="menu">
+            <ul>
+                <li><a href="/">Home</a></li>
+                <li><a href="/movies">All movies</a></li>
+                <li><a href="/movie/add">Add movie</a></li>
+                <li class="align-right"><a href="/login">Login</a></li>
+            </ul>
+        </nav>
+        {{ .Htmlstr }}
+    </body>
+</html>
+{{ end }}
+
+{{ block "movie" .}}
+<section class="movie">
+    <h2>{{.Movie.Title}}</h2>
+    <ul>
+        {{ range .Genres }}
+            {{ block "film-genre" .}}
+                <li>{{ . }}</li>
+            {{ end }}
+        {{ end }}
+    </ul>
+    <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="next p" hx-swap="innerHTML" hx-confirm="Are you sure?">Delete</button>
+    <p hx-swap="innerHTML"></p>
+</section>
+{{ end }}
+
+{{ block "delete-result" . }}
+    <p style="color: red">{{ . }}</p>
+{{ end }}
+
+{{ block "add-movie" . }}
+<section id="add-movie">
+    <h2 class="mb-4">Add Movie</h2>
+
+    <form hx-post="/movie/" hx-target="#add-movie">
+        <div>
+            <label for="film-title">Title</label>
+            <input type="text" value="{{ .Movie.Title }}" name="title" id="film-title" class="form-control" required />
+        </div>
+        <div>
+            <label for="film-genres">Genres</label>
+            <input type="text" value="{{ .Movie.Genres }}" name="genres" id="film-genres" class="form-control" />
+        </div>
+
+        <button type="submit">
+            <span class="spinner-border spinner-border-sm htmx-indicator" id="spinner" role="status" aria-hidden="true"></span>
+            Submit
+        </button>       
+    </form>
+    {{ if .Errors }}
+        {{ range .Errors }}
+            <p>Error: {{ . }}</p>
+        {{ end }}
+    {{ else if .ID }}
+        <p>Movie added to database. ID is <a href="/movie/{{ .ID }}" title="Press to open created movie page!">{{ .ID }}</a></p>
+    {{ end }}
+</section>
+{{ end }}
+
+{{ block "all-movies" .}}
+    <main>
+        <table hx-indicator=".htmx-indicator">
+            <tr hx-get="/movies/0" hx-trigger="revealed" hx-swap="afterend"><th>Title</th><th>Genres</th></tr>
+        </table>
+    </main>
+{{ end }}
+
+{{ block "movie-rows" . }}
+    {{ range . }}
+        {{ if not .Last}}
+            <tr><td><a href="/movie/{{ .ID }}">{{ .Title }}</a></td><td>{{ .Genres }}</td></tr>
+        {{ else }}
+            <tr hx-get="/movies/{{ .ID }}" hx-trigger="revealed" hx-swap="afterend"><td><a href="/movie/{{ .ID }}">{{ .Title }}</a></td><td>{{ .Genres }}</td></tr>
+        {{ end }}
+    {{ end }}
+{{ end }}
+
+<div class="col-4">
+    <h1 class="mb-4">Delete Movie</h1>
+    <form action="/movie/del" method="post">
+        <div class="mb-3">
+            <label for="film-id">ID</label>
+            <input type="text" name="id" id="film-id" class="form-control" value={{.Movie.ID}} required/>
+        </div>
+        <button type="submit" class="btn btn-primary">
+            <span class="spinner-border spinner-border-sm htmx-indicator" id="spinner" role="status" aria-hidden="true"></span>
+            DELETE
+        </button>
+    </form>
+</div>
