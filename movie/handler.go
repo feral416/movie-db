@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"movie_db/db"
 	"net/http"
+	"unicode/utf8"
 )
 
 var tmpl = template.Must(template.ParseGlob("views/*.html"))
@@ -168,5 +169,35 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	if len(Movies) > 0 {
 		Movies[len(Movies)-1].Last = true
 	}
+	//lag for testing loading indicator
+	//time.Sleep(5 * time.Second)
 	tmpl.ExecuteTemplate(w, "movie-rows", Movies)
+}
+
+func (h *Handler) SearchByTitle(w http.ResponseWriter, r *http.Request) {
+	//time.Sleep(5 * time.Second)
+	const searchLimit int = 10
+	userInput := r.PostFormValue("search")
+	Movies := make([]Movie, 0)
+	if utf8.RuneCountInString(userInput) < 1 {
+		return
+	}
+	userInput += "%"
+	query := `SELECT movieID, title FROM movies WHERE title LIKE ? LIMIT ?`
+	rows, err := db.DB.Query(query, userInput, searchLimit)
+	if err != nil {
+		//TODO: add error logging
+		return
+	}
+	for rows.Next() {
+		movie := &Movie{}
+
+		if err := rows.Scan(&movie.ID, &movie.Title); err != nil {
+			fmt.Println("Error while scanning a row!")
+			return
+		}
+		Movies = append(Movies, *movie)
+	}
+	tmpl.ExecuteTemplate(w, "search-results", Movies)
+
 }

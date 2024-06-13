@@ -13,6 +13,14 @@
     </head>
 
     <body>
+        <section class="search-container">
+            <input class="form-control" type="search" name="search" placeholder="Search"
+            hx-post="/search" hx-trigger="input changed delay:500ms, search"
+            hx-target="#search-results" hx-indicator=".htmx-indicator">
+            <img class="htmx-indicator" width="60" src="/static/img/bars.svg">
+            <ul id="search-results">
+            </ul>
+        </section>
         <nav class="menu">
             <ul>
                 <li><a href="/">Home</a></li>
@@ -24,6 +32,12 @@
         {{ .Htmlstr }}
     </body>
 </html>
+{{ end }}
+
+{{ block "search-results" . }}
+    {{ range . }}
+        <li><a href="/movie/{{ .ID }}">{{ .Title }}</a></li>
+    {{ end }}
 {{ end }}
 
 {{ block "movie" .}}
@@ -79,6 +93,9 @@
         <table hx-indicator=".htmx-indicator">
             <tr hx-get="/movies/0" hx-trigger="revealed" hx-swap="afterend"><th>Title</th><th>Genres</th></tr>
         </table>
+        <center>
+            <img class="htmx-indicator" width="60" src="/static/img/bars.svg">
+        </center>
     </main>
 {{ end }}
 
