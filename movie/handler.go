@@ -12,6 +12,10 @@ var tmpl = template.Must(template.ParseGlob("views/*.html"))
 
 type Handler struct{}
 
+func (h *Handler) GetIndex(w http.ResponseWriter, r *http.Request) {
+	tmpl.ExecuteTemplate(w, "index", "")
+}
+
 func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT * FROM movies WHERE movieId = ?`
 	movie := &Movie{}

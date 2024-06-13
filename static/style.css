@@ -22,10 +22,10 @@ p {
   font-size: 2rem;
 }
 
-body {
+nav {
+  background-color: black;
   padding: 2rem;
 }
-
 
 nav ul {
   font-size: 2rem;
@@ -33,6 +33,7 @@ nav ul {
   display: flex;
   flex-direction: row;
   padding: 0;
+  margin: 0;
 }
 
 button {
@@ -61,6 +62,9 @@ nav li {
   border: 2px, solid, white;
   margin-right: 1rem;
   border-radius: 1rem;
+  a {
+    border: none;
+  }
 }
 
 nav .align-right {
@@ -77,11 +81,11 @@ h2 {
 
 table {
   display: table;
-  border-collapse: separate;
+  border-collapse: collapse;
   box-sizing: border-box;
   text-indent: initial;
   unicode-bidi: isolate;
-  border: 1px solid lightgray;
+ 
   border-spacing: 2px;
   font-size: 2rem;
   tr, th, td {

@@ -21,6 +21,5 @@ func server() {
 func main() {
 	db.Connect()
 	defer db.DB.Close()
-	go server()
-	fmt.Scanf("h")
+	server()
 }

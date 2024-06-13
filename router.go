@@ -10,6 +10,7 @@ func loadRoutes(router *http.ServeMux) {
 	handler := &movie.Handler{}
 	fileHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
 
+	router.HandleFunc("/", handler.GetIndex)
 	router.HandleFunc("GET /movie/{id}", handler.GetMovieByID)
 	router.HandleFunc("GET /movies/", handler.GetAllMovies)
 	router.HandleFunc("GET /movies/{id}", handler.GetAllMoviesHTMX)
