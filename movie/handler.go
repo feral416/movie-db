@@ -1,10 +1,10 @@
 package movie
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
 	"movie_db/db"
+	"movie_db/utils"
 	"net/http"
 	"unicode/utf8"
 )
@@ -26,59 +26,23 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	type Context struct {
-		Movie  *Movie
-		Genres []string
-	}
-
 	context := &Context{Movie: movie, Genres: movie.SplitGenresString()}
 
-	buff := &bytes.Buffer{}
-	err = tmpl.ExecuteTemplate(buff, "movie", context)
+	buff, err := utils.TemplateWrap(tmpl, "movie", context, "index", "")
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
-
-	err = tmpl.ExecuteTemplate(w, "index", &struct {
-		Htmlstr template.HTML
-		Data    string
-	}{Htmlstr: template.HTML(buff.String()), Data: ""})
-	if err != nil {
-		fmt.Println(err)
-	}
-	//w.Write(bytes.Join([][]byte{[]byte(movie.Title), []byte(movie.Genres)}, []byte(" ")))
+	fmt.Fprint(w, buff)
 }
 
-type ContextAddMovie struct {
-	Movie  *Movie
-	Errors []string
-	ID     int64
-}
-
-func newEmptyContextAddMovie() (c *ContextAddMovie) {
-	return &ContextAddMovie{
-		&Movie{},
-		[]string{},
-		0,
-	}
-}
-
-func (h *Handler) AddMovie(w http.ResponseWriter, r *http.Request) {
-
-	buff := &bytes.Buffer{}
-	err := tmpl.ExecuteTemplate(buff, "add-movie", newEmptyContextAddMovie())
+func (h *Handler) AddMoviePage(w http.ResponseWriter, r *http.Request) {
+	buff, err := utils.TemplateWrap(tmpl, "add-movie", newEmptyContextAddMovie(), "index", "")
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
-
-	err = tmpl.ExecuteTemplate(w, "index", &struct {
-		Htmlstr template.HTML
-		Data    string
-	}{Htmlstr: template.HTML(buff.String()), Data: ""})
-	if err != nil {
-		fmt.Println(err)
-	}
-	//w.Write(bytes.Join([][]byte{[]byte(movie.Title), []byte(movie.Genres)}, []byte(" ")))
+	fmt.Fprint(w, buff)
 }
 
 func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
@@ -98,58 +62,69 @@ func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
 			context.ID, _ = result.LastInsertId()
 		}
 	}
-
 	tmpl.ExecuteTemplate(w, "add-movie", context)
 }
 
 func (h *Handler) DeleteMovie(w http.ResponseWriter, r *http.Request) {
+	context := NewMovieActionsContext()
 	query := `DELETE FROM movies WHERE movieId = ?`
 	result, err := db.DB.Exec(query, r.PathValue("id"))
-	var response string
 	if err != nil {
 		fmt.Println(err)
-		response = "Error while deleting a movie!"
+		context.Error = "Error while deleting a movie!"
 	} else if n, _ := result.RowsAffected(); n == 0 {
-		response = "Movie doesn't exist!"
+		context.Error = "Movie doesn't exist!"
 	} else {
-		response = "Movie deleted!"
+		context.Msg = "Movie deleted!"
 	}
+	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+}
 
-	tmpl.ExecuteTemplate(w, "delete-result", response)
+func (h *Handler) GetEditMovieForm(w http.ResponseWriter, r *http.Request) {
+	context := NewMovieActionsContext()
+	query := `SELECT * FROM movies WHERE movieId = ?`
+	err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&context.ID, &context.Title, &context.Genres)
+	if err != nil {
+		context.Error = "Error while getting movie information from the DB!"
+	}
+	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+}
+
+func (h *Handler) EmptyResponse(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprint(w, "")
 }
 
 func (h *Handler) UpdateMovie(w http.ResponseWriter, r *http.Request) {
-	query := `UPDATE movies SET title = ?, genres = ? WHERE movieId = ?`
-	result, err := db.DB.Exec(query, r.PostFormValue("title"), r.PostFormValue("genres"), r.PathValue("id"))
-	if err != nil {
-		fmt.Fprint(w, "Error while updating a movie: ", err)
-		return
+	context := NewMovieActionsContext()
+	title := r.PostFormValue("title")
+	if utf8.RuneCount([]byte(title)) < 1 {
+		context.Error = "Movie not updated: title too short!"
+	} else {
+		query := `UPDATE movies SET title = ?, genres = ? WHERE movieId = ?`
+		result, err := db.DB.Exec(query, title, r.PostFormValue("genres"), r.PathValue("id"))
+		if err != nil {
+			context.Error = "Error while updating a movie in database!"
+		} else if n, _ := result.RowsAffected(); n == 1 {
+			context.Msg = "Movie updated successfully."
+		} else {
+			context.Error = "Something wrong: movie might have been deleted!"
+		}
 	}
-	fmt.Fprint(w, result)
+	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
 }
 
 func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
-	buff := &bytes.Buffer{}
-	err := tmpl.ExecuteTemplate(buff, "all-movies", "")
-	if err != nil {
-		fmt.Println(err)
-	}
 
-	err = tmpl.ExecuteTemplate(w, "index", &struct {
-		Htmlstr template.HTML
-		Data    string
-	}{Htmlstr: template.HTML(buff.String()), Data: ""})
+	buff, err := utils.TemplateWrap(tmpl, "all-movies", "", "index", "")
 	if err != nil {
 		fmt.Println(err)
+		return
 	}
+	fmt.Fprint(w, buff)
 }
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	const recordsPerPage int = 20
-	type MovContext struct {
-		Movie
-		Last bool
-	}
 	Movies := []MovContext{}
 	query := `SELECT * FROM movies WHERE movieId > ? ORDER BY movieId ASC LIMIT ?`
 	rows, err := db.DB.Query(query, r.PathValue("id"), recordsPerPage)
@@ -199,5 +174,4 @@ func (h *Handler) SearchByTitle(w http.ResponseWriter, r *http.Request) {
 		Movies = append(Movies, *movie)
 	}
 	tmpl.ExecuteTemplate(w, "search-results", Movies)
-
 }

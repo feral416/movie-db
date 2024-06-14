@@ -1,3 +1,7 @@
+* {
+  box-sizing: border-box;
+}
+
 html,
 body {
   padding: 0;
@@ -120,6 +124,8 @@ table {
 
 .search-container {
   background-color: black;
+
+
   input, ul {
     width: 50vw;
     font-size: 2rem;
@@ -132,19 +138,21 @@ table {
     margin: 0;
     padding: 0;
   }
+
+
   img, input {
     display: inline-block;
     height: 3rem;
     vertical-align: bottom;
     color: white;
   }
+
+}
+/* Hides search when not focused */
+.search-container:not(:focus-within) ul {
+  display: none;
 }
 
-
-
-* {
-  box-sizing: border-box;
-}
 
 #not-connected:before {
   content: "⬤";

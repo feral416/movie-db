@@ -24,7 +24,7 @@
         <nav class="menu">
             <ul>
                 <li><a href="/">Home</a></li>
-                <li><a href="/movies">All movies</a></li>
+                <li><a href="/movies">Catalog</a></li>
                 <li><a href="/movie/add">Add movie</a></li>
                 <li class="align-right"><a href="/login">Login</a></li>
             </ul>
@@ -50,13 +50,42 @@
             {{ end }}
         {{ end }}
     </ul>
-    <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="next p" hx-swap="innerHTML" hx-confirm="Are you sure?">Delete</button>
-    <p hx-swap="innerHTML"></p>
+    <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-confirm="Are you sure?">Delete</button>
+    <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML">Edit</button>
+    <div id="movie-actions-result"></div>
 </section>
 {{ end }}
 
-{{ block "delete-result" . }}
-    <p style="color: red">{{ . }}</p>
+{{ block "movie-actions-result" . }}
+    {{ if .Error }}
+        <p style="color: red">{{ .Error }}</p>
+    {{ else if .Msg }}
+        <p style="color: green">{{ .Msg }}</p>
+    {{ else }} 
+        {{ template "movie-edit-form" . }}
+    {{ end }}
+{{ end }}
+
+{{ block "movie-edit-form" . }}
+    <h2>Edit movie</h2>
+    <form hx-put="/movie/{{ .ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-confirm="Sure?">
+        <div>
+            <label for="film-title">Title</label>
+            <input type="text" value="{{ .Movie.Title }}" name="title" id="film-title" class="form-control" required />
+        </div>
+        <div>
+            <label for="film-genres">Genres</label>
+            <input type="text" value="{{ .Movie.Genres }}" name="genres" id="film-genres" class="form-control" />
+        </div>
+
+        <button type="submit">
+            <span class="htmx-indicator"></span>
+            Save
+        </button> 
+        <button type="button" hx-get="/empty" hx-target="#movie-actions-result" hx-swap="innerHTML">
+            Cancel
+        </button>
+    </form>
 {{ end }}
 
 {{ block "add-movie" . }}
