@@ -46,6 +46,7 @@ func (h *Handler) AddMoviePage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
+	//time.Sleep(5 * time.Second)
 	movie := &Movie{Title: r.PostFormValue("title"), Genres: r.PostFormValue("genres")}
 	context := newEmptyContextAddMovie()
 	if movie.Title == "" {
@@ -126,14 +127,14 @@ func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	const recordsPerPage int = 20
 	Movies := []MovContext{}
-	query := `SELECT * FROM movies WHERE movieId > ? ORDER BY movieId ASC LIMIT ?`
+	query := `SELECT * FROM movies WHERE movieId > ? ORDER BY movieId DESC LIMIT ?`
 	rows, err := db.DB.Query(query, r.PathValue("id"), recordsPerPage)
 	if err != nil {
 		fmt.Fprint(w, "Error in GetAllMovies :", err)
 		return
 	}
 	for rows.Next() {
-		movie := &MovContext{Movie: Movie{}}
+		movie := &MovContext{Movie: &Movie{}}
 		err := rows.Scan(&movie.ID, &movie.Title, &movie.Genres)
 		if err != nil {
 			fmt.Println("Error in GetAllMovies while scanning a row :", err)

@@ -30,6 +30,6 @@ func newEmptyContextAddMovie() (c *ContextAddMovie) {
 }
 
 type MovContext struct {
-	Movie
+	*Movie
 	Last bool
 }
