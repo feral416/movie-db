@@ -10,6 +10,11 @@
     <link href="/static/bootstrap.min.css" rel="stylesheet">
     <script src="/static/bootstrap.bundle.min.js" defer></script>
     <script src="/static/htmx/htmx.min.js"></script>
+    <style>
+      .search-container:not(:focus-within) ul {
+        display: none;
+      }
+    </style>
   </head>
 
   <body class="container">   
@@ -26,8 +31,8 @@
             <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
           </ul>
         </div>
-        <section class="">
-          <input class="form-control" type="search" name="search" placeholder="Search"
+        <section class="search-container">
+          <input class="form-control " type="search" name="search" placeholder="Search"
           hx-post="/search" hx-trigger="input changed delay:500ms, search"
           hx-target="#search-results" >
           <ul id="search-results" class="list-group position-absolute pe-2">
@@ -126,9 +131,9 @@
 {{ end }}
 
 {{ block "all-movies" .}}
-  <main>
-    <table hx-indicator=".htmx-indicator">
-      <tr hx-get="/movies/0" hx-trigger="revealed" hx-swap="afterend"><th>Title</th><th>Genres</th></tr>
+  <main class="container">
+    <table hx-indicator=".htmx-indicator" class="table">
+      <tr hx-get="/movies/0" hx-trigger="revealed" hx-swap="afterend"><th scope="col">Title</th><th scope="col">Genres</th></tr>
     </table>
     <center>
       <img class="htmx-indicator" width="60" src="/static/img/bars.svg">

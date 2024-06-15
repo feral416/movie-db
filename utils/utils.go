@@ -2,25 +2,25 @@ package utils
 
 import (
 	"html/template"
+	"io"
 	"strings"
 )
 
 // Wraps one template into another. In wrapper target should be named as {{ .Htmlstr }}, and wrapper data named Data
-func TemplateWrap(tmpl *template.Template, targetName string, targetData any, wrapperName string, wrapperData any) (*strings.Builder, error) {
+func TemplateWrap(tmpl *template.Template, w io.Writer, targetName string, targetData any, wrapperName string, wrapperData any) error {
 	buff := &strings.Builder{}
 	err := tmpl.ExecuteTemplate(buff, targetName, targetData)
 	if err != nil {
-		return buff, err
+		return err
 	}
 
 	wrapperCtx := &struct {
 		Htmlstr template.HTML
 		Data    any
 	}{template.HTML(buff.String()), wrapperData}
-	buff.Reset()
-	err = tmpl.ExecuteTemplate(buff, "index", wrapperCtx)
+	err = tmpl.ExecuteTemplate(w, "index", wrapperCtx)
 	if err != nil {
-		return buff, err
+		return err
 	}
-	return buff, nil
+	return nil
 }

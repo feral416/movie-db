@@ -28,21 +28,19 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 
 	context := &Context{Movie: movie, Genres: movie.SplitGenresString()}
 
-	buff, err := utils.TemplateWrap(tmpl, "movie", context, "index", "")
+	err = utils.TemplateWrap(tmpl, w, "movie", context, "index", "")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Fprint(w, buff)
 }
 
 func (h *Handler) AddMoviePage(w http.ResponseWriter, r *http.Request) {
-	buff, err := utils.TemplateWrap(tmpl, "add-movie", newEmptyContextAddMovie(), "index", "")
+	err := utils.TemplateWrap(tmpl, w, "add-movie", newEmptyContextAddMovie(), "index", "")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Fprint(w, buff)
 }
 
 func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
@@ -116,12 +114,11 @@ func (h *Handler) UpdateMovie(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 
-	buff, err := utils.TemplateWrap(tmpl, "all-movies", "", "index", "")
+	err := utils.TemplateWrap(tmpl, w, "all-movies", "", "index", "")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Fprint(w, buff)
 }
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
