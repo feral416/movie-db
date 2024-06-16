@@ -14,6 +14,10 @@
       .search-container:not(:focus-within) ul {
         display: none;
       }
+
+      #progress {
+        width: 100%;
+      }
     </style>
   </head>
 
@@ -34,7 +38,7 @@
         <section class="search-container">
           <input class="form-control " type="search" name="search" placeholder="Search"
           hx-post="/search" hx-trigger="input changed delay:500ms, search"
-          hx-target="#search-results" >
+          hx-target="#search-results">
           <ul id="search-results" class="list-group position-absolute pe-2">
           </ul>
         </section>
@@ -54,15 +58,16 @@
 {{ block "movie" .}}
 <section class="movie container">
   <h2>{{.Movie.Title}}</h2>
-  <ul>
+  <img src="/movie/poster/{{ .Movie.ID }}">
+  <ul class="container-fluid list-group list-group-horizontal pb-2">
     {{ range .Genres }}
       {{ block "film-genre" .}}
-        <li>{{ . }}</li>
+        <li class="list-group-item border border-primary rounded me-1">{{ . }}</li>
       {{ end }}
     {{ end }}
   </ul>
-  <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-confirm="Are you sure?" class="btn btn-primary">Delete</button>
-  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn btn-primary">Edit</button>
+  <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-confirm="Are you sure?" class="btn btn-primary m-1">Delete</button>
+  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn btn-primary m-1">Edit</button>
   <div id="movie-actions-result"></div>
 </section>
 {{ end }}
@@ -78,9 +83,12 @@
 {{ end }}
 
 {{ block "movie-edit-form" . }}
-  <div class="container">
-    <h2>Edit movie</h2>
-    <form hx-put="/movie/{{ .ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-indicator=".htmx-indicator" hx-confirm="Sure?" class="form-control">
+  <div class="container form-control">
+    <div class="d-flex flex-row justify-content-between">
+      <h2>Edit movie</h2>
+      <button type="button" hx-get="/empty" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn-close"></button>
+    </div>
+    <form hx-put="/movie/{{ .ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-indicator=".htmx-indicator" hx-confirm="Sure?">
       <div>
         <label for="film-title">Title</label>
         <input type="text" value="{{ .Movie.Title }}" name="title" id="film-title" class="form-control" required />
@@ -89,14 +97,19 @@
         <label for="film-genres">Genres</label>
         <input type="text" value="{{ .Movie.Genres }}" name="genres" id="film-genres" class="form-control" />
       </div>
-  
       <button type="submit" class="btn btn-primary">
-        <span class="htmx-indicator"></span>
+        <span class="htmx-indicator m-1"></span>
         Save
       </button> 
-      <button type="button" hx-get="/empty" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn btn-primary">
-        Cancel
+    </form>
+    <form hx-encoding="multipart/form-data" hx-put="/movie/poster/{{ .Movie.ID }}"
+        _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100'>
+      <label class="form-label" for="input-file">Choose poster file. Allowed png up to 1MB!</label>
+      <input class="form-control" id="input-file" type="file" name="file">
+      <button class="btn btn-primary m-1">
+        Upload
       </button>
+      <progress id="progress" class="progress" value="0" max="100"></progress>
     </form>
   </div>
 {{ end }}
@@ -133,7 +146,7 @@
 {{ block "all-movies" .}}
   <main class="container">
     <table hx-indicator=".htmx-indicator" class="table">
-      <tr hx-get="/movies/0" hx-trigger="revealed" hx-swap="afterend"><th scope="col">Title</th><th scope="col">Genres</th></tr>
+      <tr hx-get="/movies/0" hx-trigger="revealed" hx-swap="afterend swap:1s"><th scope="col">Title</th><th scope="col">Genres</th></tr>
     </table>
     <center>
       <img class="htmx-indicator" width="60" src="/static/img/bars.svg">

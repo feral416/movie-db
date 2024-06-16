@@ -3,9 +3,12 @@ package movie
 import (
 	"fmt"
 	"html/template"
+	"io"
 	"movie_db/db"
 	"movie_db/utils"
 	"net/http"
+	"os"
+	"strconv"
 	"unicode/utf8"
 )
 
@@ -33,6 +36,21 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(err)
 		return
 	}
+}
+
+func (h *Handler) GetPoster(w http.ResponseWriter, r *http.Request) {
+	fileBytes, err := os.ReadFile("assets/posters/" + r.PathValue("id") + ".png")
+	if err != nil {
+		bytes, err := os.ReadFile("assets/posters/no-poster.png")
+		if err != nil {
+			return
+		}
+		w.Write(bytes)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Write(fileBytes)
 }
 
 func (h *Handler) AddMoviePage(w http.ResponseWriter, r *http.Request) {
@@ -112,6 +130,61 @@ func (h *Handler) UpdateMovie(w http.ResponseWriter, r *http.Request) {
 	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
 }
 
+func (h *Handler) UpdatePoster(w http.ResponseWriter, r *http.Request) {
+	context := func() *MovieActionsContext {
+		context := NewMovieActionsContext()
+		const MB int64 = 1 << 20 //megabyte size
+		id := r.PathValue("id")
+
+		if id == "" {
+			context.Error = "Wrong movie id!"
+			tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+			return context
+		}
+		var exists bool
+		query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
+		if err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&exists); err != nil {
+			context.Error = "No connection to db or movie doesn't exist in db!"
+			return context
+		}
+		if err := r.ParseMultipartForm(MB); err != nil {
+			context.Error = "Error while parsing the file!"
+			return context
+		}
+		formFile, header, err := r.FormFile("file")
+		if err != nil {
+			context.Error = "Error retrieving the file!"
+			return context
+		}
+		defer formFile.Close()
+		if header.Size > 1*MB {
+			context.Error = "File larger than 1MB!"
+			return context
+		}
+		formFileBytes, err := io.ReadAll(formFile)
+		if err != nil {
+			context.Error = "Error reading the file!"
+			return context
+		}
+		if ct := http.DetectContentType(formFileBytes); ct != "image/png" {
+			context.Error = "File is not a png image!"
+			return context
+		}
+		newFile, err := os.Create("assets/posters/" + id + ".png")
+		if err != nil {
+			context.Error = "Error creating the file!"
+			return context
+		}
+		defer newFile.Close()
+		newFile.Write(formFileBytes)
+		context.Msg = "File uploaded. Size: " + strconv.FormatInt(header.Size, 10)
+		return context
+	}()
+
+	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+
+}
+
 func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 
 	err := utils.TemplateWrap(tmpl, w, "all-movies", "", "index", "")
@@ -123,11 +196,16 @@ func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	const recordsPerPage int = 20
+	id := r.PathValue("id")
 	Movies := []MovContext{}
-	query := `SELECT * FROM movies WHERE movieId > ? ORDER BY movieId DESC LIMIT ?`
-	rows, err := db.DB.Query(query, r.PathValue("id"), recordsPerPage)
+	whereCondition := "> ?"
+	if id != "0" {
+		whereCondition = `< ?`
+	}
+	query := `SELECT * FROM movies WHERE movieId ` + whereCondition + ` ORDER BY movieId DESC LIMIT ?`
+	rows, err := db.DB.Query(query, id, recordsPerPage)
 	if err != nil {
-		fmt.Fprint(w, "Error in GetAllMovies :", err)
+		fmt.Println("Error in GetAllMovies :", err)
 		return
 	}
 	for rows.Next() {
