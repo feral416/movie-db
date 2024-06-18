@@ -194,16 +194,39 @@ func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) RealodSearchCatalog(w http.ResponseWriter, r *http.Request) {
+	tmpl.ExecuteTemplate(w, "search-catalog", "")
+}
+
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	const recordsPerPage int = 20
-	id := r.PathValue("id")
+	const idColumnName = " movieId "
+	const titleColumnName = " title "
+	prompt := r.PostFormValue("prompt")
+	lastElement := r.PostFormValue("last-el")
+	sortBy := r.PostFormValue("sort-by")
+	order := r.PostFormValue("order")
 	Movies := []MovContext{}
-	whereCondition := "> ?"
-	if id != "0" {
-		whereCondition = `< ?`
+	whereColumnName := idColumnName
+	whereCondition := " > ? "
+	orderQueryPart := " ASC "
+	sortPrmVal := lastElement
+	prompt += "%"
+	//id for date(cuz id rises every insertion)
+	if order == "desc" {
+		orderQueryPart = " DESC "
+		if lastElement != "" {
+			whereCondition = ` < ? `
+		}
 	}
-	query := `SELECT * FROM movies WHERE movieId ` + whereCondition + ` ORDER BY movieId DESC LIMIT ?`
-	rows, err := db.DB.Query(query, id, recordsPerPage)
+	if sortBy == "title" {
+		whereColumnName = titleColumnName
+		sortPrmVal = lastElement
+	}
+
+	query := `SELECT * FROM movies WHERE title LIKE ? AND ` + whereColumnName + whereCondition + `ORDER BY` + whereColumnName + orderQueryPart + `LIMIT ?`
+
+	rows, err := db.DB.Query(query, prompt, sortPrmVal, recordsPerPage)
 	if err != nil {
 		fmt.Println("Error in GetAllMovies :", err)
 		return
@@ -218,7 +241,11 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(Movies) > 0 {
-		Movies[len(Movies)-1].Last = true
+		lastIndex := len(Movies) - 1
+		Movies[lastIndex].Last = strconv.Itoa(Movies[lastIndex].ID)
+		if sortBy == "title" {
+			Movies[lastIndex].Last = Movies[lastIndex].Title
+		}
 	}
 	//lag for testing loading indicator
 	//time.Sleep(5 * time.Second)
