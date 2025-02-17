@@ -1,6 +1,7 @@
 package movie
 
 import (
+	"database/sql"
 	"fmt"
 	"html/template"
 	"io"
@@ -9,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 	"unicode/utf8"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 var tmpl = template.Must(template.ParseGlob("views/*.html"))
@@ -84,15 +88,17 @@ func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) DeleteMovie(w http.ResponseWriter, r *http.Request) {
 	context := NewMovieActionsContext()
+	id := r.PathValue("id")
 	query := `DELETE FROM movies WHERE movieId = ?`
-	result, err := db.DB.Exec(query, r.PathValue("id"))
+	result, err := db.DB.Exec(query, id)
 	if err != nil {
 		fmt.Println(err)
 		context.Error = "Error while deleting a movie!"
 	} else if n, _ := result.RowsAffected(); n == 0 {
 		context.Error = "Movie doesn't exist!"
 	} else {
-		context.Msg = "Movie deleted!"
+		context.Msg = "Movie deleted in database!"
+		os.Remove("assets/posters/" + id + ".png")
 	}
 	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
 }
@@ -143,7 +149,7 @@ func (h *Handler) UpdatePoster(w http.ResponseWriter, r *http.Request) {
 		}
 		var exists bool
 		query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
-		if err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&exists); err != nil {
+		if err := db.DB.QueryRow(query, id).Scan(&exists); err != nil {
 			context.Error = "No connection to db or movie doesn't exist in db!"
 			return context
 		}
@@ -196,6 +202,117 @@ func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) RealodSearchCatalog(w http.ResponseWriter, r *http.Request) {
 	tmpl.ExecuteTemplate(w, "search-catalog", "")
+}
+
+func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
+	username := r.PostFormValue("username")
+	password := r.PostFormValue("password")
+	const passwordMinLength, passwordMaxLength = 8, 128
+	if username == "" || password == "" {
+		fmt.Println("Username or password can't be empty!")
+		return
+	}
+	if !utils.PasswordAnalysis(password, passwordMinLength, passwordMaxLength) {
+		fmt.Println("Password doesn't meet the requirements!")
+		return
+	}
+
+	var exists bool
+	query := `SELECT EXISTS(SELECT * FROM users WHERE username = ?)`
+	if err := db.DB.QueryRow(query, username).Scan(&exists); err != nil {
+		fmt.Println("No connection to db!")
+		return
+	}
+	if exists {
+		fmt.Println("Username already exists!")
+		return
+	}
+	hashedPassword, err := utils.HashPassword(password)
+	if err != nil {
+		fmt.Println("Error hashing password!")
+		return
+	}
+	query = `INSERT INTO users (username, password) VALUES (?, ?)`
+	result, err := db.DB.Exec(query, username, hashedPassword)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		fmt.Println("Error getting last insert ID:", err)
+		return
+	}
+	fmt.Println("User added successfully. ID:", id)
+
+}
+
+func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	username := r.PostFormValue("username")
+	password := r.PostFormValue("password")
+	if username == "" || password == "" {
+		http.Error(w, "Username or password can't be empty!", http.StatusBadRequest)
+		fmt.Println("Username or password can't be empty!")
+		return
+	}
+	query := `SELECT userId, password FROM users WHERE username = ?`
+	user := &User{}
+	if err := db.DB.QueryRow(query, username).Scan(&user.Id, &user.Password); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			fmt.Println("Invalid username or password", err)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		fmt.Println("Error while login", err)
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		fmt.Println("Wrong password!")
+		return
+	}
+	const tokenLenght = 32
+	token, err := utils.GenerateToken(tokenLenght)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		fmt.Println("Error generating token!")
+		return
+	}
+	session := Session{user.Id, username, time.Now().Add(time.Hour * 24)}
+	Sessions.Create(session, token)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    token,
+		Expires:  session.Expires,
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	//http.Redirect(w, r, "/", http.StatusSeeOther)
+	fmt.Println("User found:", w)
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		http.Error(w, "No session token", http.StatusBadRequest)
+		fmt.Println("No session token")
+		return
+	}
+	Sessions.Delete(cookie.Value)
+	http.SetCookie(w, &http.Cookie{
+		Name:     "session_token",
+		Value:    "",
+		Expires:  time.Now().Add(-time.Hour),
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteStrictMode,
+		Path:     "/",
+	})
+	//http.Redirect(w, r, "/", http.StatusSeeOther)
+	fmt.Println("User logged out")
 }
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
@@ -277,4 +394,5 @@ func (h *Handler) SearchByTitle(w http.ResponseWriter, r *http.Request) {
 		Movies = append(Movies, *movie)
 	}
 	tmpl.ExecuteTemplate(w, "search-results", Movies)
+
 }

@@ -23,6 +23,9 @@ func loadRoutes(router *http.ServeMux) {
 	router.HandleFunc("PUT /movie/{id}", handler.UpdateMovie)
 	router.HandleFunc("PUT /movie/poster/{id}", handler.UpdatePoster)
 	router.HandleFunc("POST /search", handler.SearchByTitle)
+	router.HandleFunc("POST /user/register", handler.PostRegister)
+	router.HandleFunc("POST /user/login", handler.Login)
+	router.HandleFunc("POST /user/logout", handler.Logout)
 	router.HandleFunc("GET /empty", handler.EmptyResponse)
 	router.Handle("/static/", fileHandler)
 }

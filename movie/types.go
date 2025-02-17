@@ -1,5 +1,12 @@
 package movie
 
+import (
+	"sync"
+	"time"
+)
+
+var Sessions *SessionsStore
+
 type Context struct {
 	Movie  *Movie
 	Genres []string
@@ -32,4 +39,45 @@ func newEmptyContextAddMovie() (c *ContextAddMovie) {
 type MovContext struct {
 	*Movie
 	Last string
+}
+
+type User struct {
+	Id       int
+	Password string
+}
+
+type Session struct {
+	UserId   int
+	Username string
+	Expires  time.Time
+}
+
+type SessionsStore struct {
+	Sessions map[string]Session
+	mu       sync.RWMutex
+}
+
+func (ss *SessionsStore) Create(s Session, token string) {
+	defer ss.mu.Unlock()
+	ss.mu.Lock()
+	ss.Sessions[token] = s
+}
+
+func (ss *SessionsStore) Get(token string) (Session, bool) {
+	defer ss.mu.RUnlock()
+	ss.mu.RLock()
+	s, ok := ss.Sessions[token]
+	return s, ok
+}
+
+func (ss *SessionsStore) Delete(token string) {
+	defer ss.mu.Unlock()
+	ss.mu.Lock()
+	delete(ss.Sessions, token)
+}
+
+func NewSessionsStore() *SessionsStore {
+	return &SessionsStore{
+		Sessions: make(map[string]Session),
+	}
 }

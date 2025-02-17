@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"movie_db/db"
+	"movie_db/movie"
 	"net/http"
 )
 
@@ -19,6 +20,7 @@ func server() {
 }
 
 func main() {
+	movie.Sessions = movie.NewSessionsStore()
 	db.Connect()
 	defer db.DB.Close()
 	server()
