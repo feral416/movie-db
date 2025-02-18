@@ -315,6 +315,54 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("User logged out")
 }
 
+func (h *Handler) PostComment(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("session_token")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	comment := r.PostFormValue("comment")
+	if comment == "" {
+		http.Error(w, "Comment can't be empty", http.StatusBadRequest)
+		return
+	}
+	movieId := r.PostFormValue("movieId")
+	if movieId == "" {
+		http.Error(w, "No movie id", http.StatusBadRequest)
+		return
+	}
+	session, ok := Sessions.Get(cookie.Value)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		fmt.Println("Unauthorized")
+		return
+	}
+	query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
+	var exists bool
+	if err := db.DB.QueryRow(query, movieId).Scan(&exists); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if !exists {
+		http.Error(w, "Movie doesn't exist", http.StatusBadRequest)
+		return
+	}
+
+	query = `INSERT INTO comments (userId, movieId, comment) VALUES (?, ?, ?)`
+	res, err := db.DB.Exec(query, session.UserId, movieId, comment)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	commentId, err := res.LastInsertId()
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	fmt.Println("Comment added successfully. ID:", commentId)
+	// TODO: add response logic
+}
+
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	const recordsPerPage int = 20
 	const idColumnName = " movieId "
