@@ -5,6 +5,11 @@ import (
 	"time"
 )
 
+// type for a context key to avoid collision
+type sessionContextKey string
+
+const S sessionContextKey = "session"
+
 var Sessions *SessionsStore
 
 type Context struct {

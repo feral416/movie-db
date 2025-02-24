@@ -209,40 +209,41 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 	const passwordMinLength, passwordMaxLength = 8, 128
 	if username == "" || password == "" {
-		fmt.Println("Username or password can't be empty!")
+		http.Error(w, "Username or password can't be empty!", http.StatusBadRequest)
 		return
 	}
 	if !utils.PasswordAnalysis(password, passwordMinLength, passwordMaxLength) {
-		fmt.Println("Password doesn't meet the requirements!")
+		http.Error(w, "Password doesn't meet the requirements!", http.StatusBadRequest)
 		return
 	}
 
 	var exists bool
 	query := `SELECT EXISTS(SELECT * FROM users WHERE username = ?)`
 	if err := db.DB.QueryRow(query, username).Scan(&exists); err != nil {
-		fmt.Println("No connection to db!")
+		http.Error(w, "DB error!", http.StatusInternalServerError)
 		return
 	}
 	if exists {
-		fmt.Println("Username already exists!")
+		http.Error(w, "Username already exists!", http.StatusBadRequest)
 		return
 	}
 	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
-		fmt.Println("Error hashing password!")
+		http.Error(w, "Error hashing password!", http.StatusInternalServerError)
 		return
 	}
 	query = `INSERT INTO users (username, password) VALUES (?, ?)`
 	result, err := db.DB.Exec(query, username, hashedPassword)
 	if err != nil {
-		fmt.Println(err)
+		http.Error(w, "DB error!", http.StatusInternalServerError)
 		return
 	}
 	id, err := result.LastInsertId()
 	if err != nil {
-		fmt.Println("Error getting last insert ID:", err)
+		http.Error(w, "Error getting last insert ID:", http.StatusInternalServerError)
 		return
 	}
+	w.WriteHeader(http.StatusCreated)
 	fmt.Println("User added successfully. ID:", id)
 
 }
@@ -252,7 +253,6 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	password := r.PostFormValue("password")
 	if username == "" || password == "" {
 		http.Error(w, "Username or password can't be empty!", http.StatusBadRequest)
-		fmt.Println("Username or password can't be empty!")
 		return
 	}
 	query := `SELECT userId, password FROM users WHERE username = ?`
@@ -260,23 +260,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	if err := db.DB.QueryRow(query, username).Scan(&user.Id, &user.Password); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-			fmt.Println("Invalid username or password", err)
 			return
 		}
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		fmt.Println("Error while login", err)
+		http.Error(w, "DB error!", http.StatusInternalServerError)
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-		fmt.Println("Wrong password!")
 		return
 	}
 	const tokenLenght = 32
 	token, err := utils.GenerateToken(tokenLenght)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		fmt.Println("Error generating token!")
+		http.Error(w, "Error generating token!", http.StatusInternalServerError)
 		return
 	}
 	session := Session{user.Id, username, time.Now().Add(time.Hour * 24)}
@@ -291,14 +287,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 	//http.Redirect(w, r, "/", http.StatusSeeOther)
-	fmt.Println("User found:", w)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err != nil {
-		http.Error(w, "No session token", http.StatusBadRequest)
-		fmt.Println("No session token")
+		http.Error(w, "No cookie!", http.StatusInternalServerError)
 		return
 	}
 	Sessions.Delete(cookie.Value)
@@ -312,15 +307,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 	//http.Redirect(w, r, "/", http.StatusSeeOther)
+	w.WriteHeader(http.StatusOK)
 	fmt.Println("User logged out")
 }
 
 func (h *Handler) PostComment(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session_token")
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
 	comment := r.PostFormValue("comment")
 	if comment == "" {
 		http.Error(w, "Comment can't be empty", http.StatusBadRequest)
@@ -331,10 +322,9 @@ func (h *Handler) PostComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "No movie id", http.StatusBadRequest)
 		return
 	}
-	session, ok := Sessions.Get(cookie.Value)
+	session, ok := r.Context().Value(S).(Session)
 	if !ok {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		fmt.Println("Unauthorized")
+		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
 	query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
@@ -361,6 +351,62 @@ func (h *Handler) PostComment(w http.ResponseWriter, r *http.Request) {
 	}
 	fmt.Println("Comment added successfully. ID:", commentId)
 	// TODO: add response logic
+	w.WriteHeader(http.StatusCreated)
+}
+
+func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
+	commentId := r.PostFormValue("commentId")
+	if commentId == "" {
+		http.Error(w, "No comment id", http.StatusBadRequest)
+		return
+	}
+	session, ok := r.Context().Value(S).(Session)
+	if !ok {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	query := `DELETE FROM comments WHERE commentId = ? AND userId = ?`
+	sqlRes, err := db.DB.Exec(query, commentId, session.UserId)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if n, _ := sqlRes.RowsAffected(); n == 0 {
+		http.Error(w, "Comment doesn't exist or you are not the author", http.StatusBadRequest)
+		return
+	}
+	//TODO: add response logic
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
+	commentId := r.PostFormValue("commentId")
+	if commentId == "" {
+		http.Error(w, "No comment id!", http.StatusBadRequest)
+		return
+	}
+	comment := r.PostFormValue("comment")
+	if comment == "" {
+		http.Error(w, "Comment can't be empty!", http.StatusBadRequest)
+		return
+	}
+	session, ok := r.Context().Value(S).(Session)
+	if !ok {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	query := `UPDATE comments SET comment = ? WHERE commentId = ? AND userId = ?)`
+	sqlRes, err := db.DB.Exec(query, comment, commentId, session.UserId)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if n, _ := sqlRes.RowsAffected(); n == 0 {
+		http.Error(w, "Comment doesn't exist or you are not the author", http.StatusBadRequest)
+		return
+	}
+	//TODO: add response logic
+	w.WriteHeader(http.StatusOK)
 }
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
