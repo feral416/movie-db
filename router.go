@@ -36,6 +36,8 @@ func loadRoutes(router *http.ServeMux) {
 	public.HandleFunc("POST /search", handler.SearchByTitle)
 	public.HandleFunc("POST /user/register", handler.PostRegister)
 	public.HandleFunc("POST /user/login", handler.Login)
+	public.HandleFunc("GET /user/userinfo", handler.GetUserInfo)
+	public.HandleFunc("GET /login", handler.GetLoginPage)
 	public.HandleFunc("GET /empty", handler.EmptyResponse)
 	//routes that require auth
 	protected := http.NewServeMux()

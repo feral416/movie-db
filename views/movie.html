@@ -10,6 +10,7 @@
     <link href="/static/bootstrap.min.css" rel="stylesheet">
     <script src="/static/bootstrap.bundle.min.js" defer></script>
     <script src="/static/htmx/htmx.min.js"></script>
+    <script src="/static/htmx/response-targets.min.js"></script>
     <style>
       .search-container:not(:focus-within) ul {
         display: none;
@@ -32,7 +33,8 @@
           <ul class="navbar-nav me-auto mb-2 mb-md-0">
             <li class="nav-item"><a class="nav-link" href="/movies">Catalog</a></li>
             <li class="nav-item"><a class="nav-link" href="/movie/add">Add movie</a></li>
-            <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
+          </ul>
+          <ul class="auth-container" hx-get="/user/userinfo" hx-trigger="load" hx-swap="innerHTML">          
           </ul>
         </div>
         <section class="search-container">
@@ -180,6 +182,36 @@
       <tr hx-post="/movies/" hx-trigger="revealed" hx-vals='{"last-el" : "{{ .Last }}"}' hx-swap="afterend" hx-include="#catalog-search"><td><a href="/movie/{{ .ID }}">{{ .Title }}</a></td><td>{{ .Genres }}</td></tr>
     {{ end }}
   {{ end }}
+{{ end }}
+
+{{ block "auth-block" . }}
+  {{ if not . }}
+    <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
+  {{ else }} 
+    <li class="nav-item"><a class="nav-link" href="/user/{{ .UserId }}">{{ .Username }}</a></li>
+    <li class="nav-item"><a class="nav-link" hx-post="auth/user/logout">Logout</a></li>
+  {{ end }}
+{{ end }}
+
+{{ block "login-block" .}}
+  <section class="container" hx-ext="response-targets">
+    <h2>Login page</h2>
+    <form hx-post="/user/login" id="login-form" class="form-control" hx-target-error="#login-result" hx-swap="innerHTML">
+      <div>
+        <label for="username-field">Login</label>
+        <input type="text" name="username" id="username-field" class="form-control" required/>
+      </div>
+      <div>
+        <label for="password-field">Password</label>
+        <input type="text" name="password" id="password-field" class="form-control" required/>
+      </div>
+      <button type="submit" class="btn-btn-primary">
+        Login
+      </button>
+    </form>
+    <div id="login-result"></div>
+    <a href="/user/register">Register</a>
+  </section>
 {{ end }}
 
 <div class="col-4">

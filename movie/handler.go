@@ -287,7 +287,14 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 	//http.Redirect(w, r, "/", http.StatusSeeOther)
-	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) GetLoginPage(w http.ResponseWriter, r *http.Request) {
+	if err := utils.TemplateWrap(tmpl, w, "login-block", "", "index", ""); err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 }
 
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
@@ -407,6 +414,22 @@ func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 	}
 	//TODO: add response logic
 	w.WriteHeader(http.StatusOK)
+}
+
+func (h *Handler) GetUserInfo(w http.ResponseWriter, r *http.Request) {
+	context := func() *Session {
+		cookie, err := r.Cookie("session_token")
+		if err != nil || cookie.Value == "" {
+			return nil
+		}
+		session, ok := Sessions.Get(cookie.Value)
+		if !ok {
+			return nil
+		}
+		return &session
+	}()
+
+	tmpl.ExecuteTemplate(w, "auth-block", context)
 }
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {

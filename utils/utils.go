@@ -23,7 +23,7 @@ func TemplateWrap(tmpl *template.Template, w io.Writer, targetName string, targe
 		Htmlstr template.HTML
 		Data    any
 	}{template.HTML(buff.String()), wrapperData}
-	err = tmpl.ExecuteTemplate(w, "index", wrapperCtx)
+	err = tmpl.ExecuteTemplate(w, wrapperName, wrapperCtx)
 	if err != nil {
 		return err
 	}
