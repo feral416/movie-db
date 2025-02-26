@@ -35,6 +35,7 @@ func loadRoutes(router *http.ServeMux) {
 	public.HandleFunc("PUT /movie/poster/{id}", handler.UpdatePoster)
 	public.HandleFunc("POST /search", handler.SearchByTitle)
 	public.HandleFunc("POST /user/register", handler.PostRegister)
+	public.HandleFunc("GET /user/register", handler.GetRegistrationPage)
 	public.HandleFunc("POST /user/login", handler.Login)
 	public.HandleFunc("GET /user/userinfo", handler.GetUserInfo)
 	public.HandleFunc("GET /login", handler.GetLoginPage)

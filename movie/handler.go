@@ -195,7 +195,7 @@ func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
 
 	err := utils.TemplateWrap(tmpl, w, "all-movies", "", "index", "")
 	if err != nil {
-		fmt.Println(err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
 }
@@ -207,9 +207,14 @@ func (h *Handler) RealodSearchCatalog(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
+	confirmPassword := r.PostFormValue("confirmPassword")
 	const passwordMinLength, passwordMaxLength = 8, 128
-	if username == "" || password == "" {
+	if username == "" || password == "" || confirmPassword == "" {
 		http.Error(w, "Username or password can't be empty!", http.StatusBadRequest)
+		return
+	}
+	if password != confirmPassword {
+		http.Error(w, "Passwords don't match!", http.StatusBadRequest)
 		return
 	}
 	if !utils.PasswordAnalysis(password, passwordMinLength, passwordMaxLength) {
@@ -246,6 +251,14 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	fmt.Println("User added successfully. ID:", id)
 
+}
+
+func (h *Handler) GetRegistrationPage(w http.ResponseWriter, r *http.Request) {
+	err := utils.TemplateWrap(tmpl, w, "register-block", "", "index", "")
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {

@@ -22,7 +22,7 @@
     </style>
   </head>
 
-  <body class="container">   
+  <body class="container" hx-ext="response-targets">   
     <nav class="navbar navbar-expand-md navbar-dark sticky-top bg-dark">
       <div class="container-fluid">
         <a class="navbar-brand" href="/">Movie database</a>
@@ -34,7 +34,7 @@
             <li class="nav-item"><a class="nav-link" href="/movies">Catalog</a></li>
             <li class="nav-item"><a class="nav-link" href="/movie/add">Add movie</a></li>
           </ul>
-          <ul class="auth-container" hx-get="/user/userinfo" hx-trigger="load" hx-swap="innerHTML">          
+          <ul class="navbar-nav ms-auto mb-2 mb-md-0 auth-container" hx-get="/user/userinfo" hx-trigger="load" hx-swap="innerHTML">          
           </ul>
         </div>
         <section class="search-container">
@@ -71,6 +71,7 @@
   <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-confirm="Are you sure?" class="btn btn-primary m-1">Delete</button>
   <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn btn-primary m-1">Edit</button>
   <div id="movie-actions-result"></div>
+  {{ template "comments-section" . }}
 </section>
 {{ end }}
 
@@ -194,7 +195,7 @@
 {{ end }}
 
 {{ block "login-block" .}}
-  <section class="container" hx-ext="response-targets">
+  <section class="container">
     <h2>Login page</h2>
     <form hx-post="/user/login" id="login-form" class="form-control" hx-target-error="#login-result" hx-swap="innerHTML">
       <div>
@@ -203,7 +204,7 @@
       </div>
       <div>
         <label for="password-field">Password</label>
-        <input type="text" name="password" id="password-field" class="form-control" required/>
+        <input type="password" name="password" id="password-field" class="form-control" required/>
       </div>
       <button type="submit" class="btn-btn-primary">
         Login
@@ -211,6 +212,51 @@
     </form>
     <div id="login-result"></div>
     <a href="/user/register">Register</a>
+  </section>
+{{ end }}
+
+{{ block "register-block" . }}
+<section class="container">
+  <h2>Registration page</h2>
+  <p>Password must be at least 8 character long, must include lower case letter, capital letter, number and special symbol. </p>
+  <form hx-post="/user/register" id="register-form" class="form-control" hx-target-error="#register-result" hx-swap="innerHTML">
+    <div>
+      <label for="username-field">Username</label>
+      <input type="text" name="username" id="username-field" class="form-control" required/>
+    </div>
+    <div>
+      <label for="password-field">Password</label>
+      <input type="password" name="password" id="password-field" class="form-control" required/>
+    </div>
+    <div>
+      <label for="confirm-password-field">Confirm password</label>
+      <input type="password" name="confirmPassword" id="confirm-password-field" class="form-control" required/>
+    </div>
+    <button type="submit" class="btn-btn-primary">
+      Register
+    </button>
+  </form>
+  <div id="register-result"></div>
+</section>
+{{ end }}
+
+{{ block "comments-section" . }}
+  <section class="container">
+    <h2>Comments</h2>
+    <form hx-post="auth/movie/comment" id="comment-form" class="form-control" hx-target-error="#comment-post-result" hx-swap="innerHTML">
+      <input type="text" name="comment" class="form-control" required/>
+      <button type="submit" class="btn-btn-primary">Comment</button>
+    </form>
+    <div id="comment-post-result"></div>
+    <ul id="comments" class="container">
+      <li>
+        <div>
+          <a href="/user/id">Username</a><p>25/02/25 12:00:00</p>
+        </div>
+        <p>Lorem ipsum commetn content</p>
+      </li>
+    </ul>
+
   </section>
 {{ end }}
 
