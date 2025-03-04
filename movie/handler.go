@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html/template"
 	"io"
+	"log"
 	"movie_db/db"
 	"movie_db/utils"
 	"net/http"
@@ -25,11 +26,16 @@ func (h *Handler) GetIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
-	query := `SELECT * FROM movies WHERE movieId = ?`
+	query := `SELECT movieId, title, genres FROM movies WHERE movieId = ?`
 	movie := &Movie{}
 	err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&movie.ID, &movie.Title, &movie.Genres)
 	if err != nil {
-		fmt.Fprint(w, "Error in GetMovieByID :", err)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Movie doesn't exist!", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error getting movie: %s", err)
 		return
 	}
 
@@ -37,7 +43,7 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 
 	err = utils.TemplateWrap(tmpl, w, "movie", context, "index", "")
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error wrapping template movie: %s", err)
 		return
 	}
 }
@@ -47,60 +53,61 @@ func (h *Handler) GetPoster(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		bytes, err := os.ReadFile("assets/posters/no-poster.png")
 		if err != nil {
+			log.Printf("Error reading the default poster: %s", err)
 			return
 		}
 		w.Write(bytes)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Write(fileBytes)
 }
 
 func (h *Handler) AddMoviePage(w http.ResponseWriter, r *http.Request) {
-	err := utils.TemplateWrap(tmpl, w, "add-movie", newEmptyContextAddMovie(), "index", "")
+	err := utils.TemplateWrap(tmpl, w, "add-movie", nil, "index", "")
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Error wrapping template add-movie: %s", err)
 		return
 	}
 }
 
 func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
-	//time.Sleep(5 * time.Second)
-	movie := &Movie{Title: r.PostFormValue("title"), Genres: r.PostFormValue("genres")}
-	context := newEmptyContextAddMovie()
-	if movie.Title == "" {
-		context.Errors = append(context.Errors, "Title can't be empty!")
-		context.Movie = movie
-	} else {
-		query := `INSERT INTO movies (title, genres) VALUES (?, ?)`
-		result, err := db.DB.Exec(query, movie.Title, movie.Genres)
-		if err != nil {
-			context.Errors = append(context.Errors, "Error while adding a movie into DB")
-			context.Movie = movie
-			fmt.Println(err)
-		} else {
-			context.ID, _ = result.LastInsertId()
-		}
+	title := r.PostFormValue("title")
+	if title == "" {
+		http.Error(w, "Title can't be empty!", http.StatusBadRequest)
+		return
 	}
-	tmpl.ExecuteTemplate(w, "add-movie", context)
+	query := `INSERT INTO movies (title, genres) VALUES (?, ?)`
+	result, err := db.DB.Exec(query, title, r.PostFormValue("genres"))
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error writing movie to db: %s", err)
+		return
+	}
+	Id, _ := result.LastInsertId()
+	w.WriteHeader(http.StatusCreated)
+	tmpl.ExecuteTemplate(w, "add-movie", Id)
 }
 
 func (h *Handler) DeleteMovie(w http.ResponseWriter, r *http.Request) {
-	context := NewMovieActionsContext()
-	id := r.PathValue("id")
+	idStr := r.PathValue("id")
+	id, err := strconv.Atoi(idStr)
+	if err != nil || id <= 0 {
+		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
+	}
 	query := `DELETE FROM movies WHERE movieId = ?`
 	result, err := db.DB.Exec(query, id)
 	if err != nil {
-		fmt.Println(err)
-		context.Error = "Error while deleting a movie!"
-	} else if n, _ := result.RowsAffected(); n == 0 {
-		context.Error = "Movie doesn't exist!"
-	} else {
-		context.Msg = "Movie deleted in database!"
-		os.Remove("assets/posters/" + id + ".png")
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error while deleting a movie: %s", err)
+		return
 	}
-	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+	if n, _ := result.RowsAffected(); n == 0 {
+		http.Error(w, "Movie doesn't exist!", http.StatusBadRequest)
+		return
+	}
+	os.Remove("assets/posters/" + idStr + ".png")
+	tmpl.ExecuteTemplate(w, "deleted-movie", nil)
 }
 
 func (h *Handler) GetEditMovieForm(w http.ResponseWriter, r *http.Request) {
@@ -243,14 +250,12 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "DB error!", http.StatusInternalServerError)
 		return
 	}
-	id, err := result.LastInsertId()
+	_, err = result.LastInsertId()
 	if err != nil {
 		http.Error(w, "Error getting last insert ID:", http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusCreated)
-	fmt.Println("User added successfully. ID:", id)
-
+	w.Header().Add("HX-Redirect", "/login")
 }
 
 func (h *Handler) GetRegistrationPage(w http.ResponseWriter, r *http.Request) {
@@ -299,6 +304,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
+	w.Header().Add("HX-Redirect", "/")
 	//http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -364,20 +370,18 @@ func (h *Handler) PostComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	commentId, err := res.LastInsertId()
+	_, err = res.LastInsertId()
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	fmt.Println("Comment added successfully. ID:", commentId)
-	// TODO: add response logic
-	w.WriteHeader(http.StatusCreated)
+	tmpl.ExecuteTemplate(w, "comments-section", movieId)
 }
 
 func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
-	commentId := r.PostFormValue("commentId")
-	if commentId == "" {
-		http.Error(w, "No comment id", http.StatusBadRequest)
+	commentId, err := strconv.Atoi(r.PathValue("commentId"))
+	if err != nil || commentId <= 0 {
+		http.Error(w, "Wrong comment id!", http.StatusBadRequest)
 		return
 	}
 	session, ok := r.Context().Value(S).(Session)
@@ -395,14 +399,13 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Comment doesn't exist or you are not the author", http.StatusBadRequest)
 		return
 	}
-	//TODO: add response logic
-	w.WriteHeader(http.StatusOK)
+	tmpl.ExecuteTemplate(w, "deleted-comment", nil)
 }
 
 func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
-	commentId := r.PostFormValue("commentId")
-	if commentId == "" {
-		http.Error(w, "No comment id!", http.StatusBadRequest)
+	commentId, err := strconv.Atoi(r.PostFormValue("commentId"))
+	if err != nil || commentId <= 0 {
+		http.Error(w, "Wrong comment id!", http.StatusBadRequest)
 		return
 	}
 	comment := r.PostFormValue("comment")
@@ -415,33 +418,91 @@ func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	query := `UPDATE comments SET comment = ? WHERE commentId = ? AND userId = ?)`
+	query := `UPDATE comments SET comment = ? WHERE commentId = ? AND userId = ?`
 	sqlRes, err := db.DB.Exec(query, comment, commentId, session.UserId)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		fmt.Println(err)
 		return
 	}
 	if n, _ := sqlRes.RowsAffected(); n == 0 {
 		http.Error(w, "Comment doesn't exist or you are not the author", http.StatusBadRequest)
 		return
 	}
-	//TODO: add response logic
-	w.WriteHeader(http.StatusOK)
+	tmpl.ExecuteTemplate(w, "comment", struct {
+		CommentId   int
+		CommentText string
+	}{commentId, comment})
+}
+
+func (h *Handler) GetComments(w http.ResponseWriter, r *http.Request) {
+	const commentsPerQuery = 20
+	session := Sessions.GetSessionInfo(r)
+	ctxSlice := []CommentsContext{}
+	movieId := r.PathValue("id")
+	lastCommentId := r.PathValue("last_comment_id")
+	query := "CALL GetComments(?, ?, ?)"
+	rows, err := db.DB.Query(query, movieId, lastCommentId, commentsPerQuery)
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		fmt.Println(err)
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		comment := &CommentsContext{}
+		err := rows.Scan(&comment.CommentText, &comment.PostedDT, &comment.UserId, &comment.CommentId, &comment.Username)
+		if err != nil {
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+			fmt.Println(err)
+			return
+		}
+		if session != nil {
+			comment.Owner = session.UserId == comment.UserId
+		}
+		ctxSlice = append(ctxSlice, *comment)
+	}
+	if len(ctxSlice) == commentsPerQuery {
+		ctxSlice[commentsPerQuery-1].Last = true
+		ctxSlice[commentsPerQuery-1].MovieId = movieId
+	}
+	tmpl.ExecuteTemplate(w, "comments", ctxSlice)
+
+}
+
+func (h *Handler) GetComment(w http.ResponseWriter, r *http.Request) {
+	commentId, err := strconv.Atoi(r.PathValue("commentId"))
+	if err != nil || commentId <= 0 {
+		http.Error(w, "Wrong comment id", http.StatusBadRequest)
+		return
+	}
+	query := `SELECT comment FROM comments WHERE commentId = ?`
+	var commentText string
+	if err := db.DB.QueryRow(query, commentId).Scan(&commentText); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Not found", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Internal server error!", http.StatusInternalServerError)
+		return
+	}
+	tmpl.ExecuteTemplate(w, "comment", struct {
+		CommentId   int
+		CommentText string
+	}{commentId, commentText})
+}
+
+func (h *Handler) GetCommentEditForm(w http.ResponseWriter, r *http.Request) {
+	commentId, err := strconv.Atoi(r.PathValue("commentId"))
+	if err != nil || commentId <= 0 {
+		http.Error(w, "Wrong comment id", http.StatusBadRequest)
+		return
+	}
+	tmpl.ExecuteTemplate(w, "edit-comment", commentId)
 }
 
 func (h *Handler) GetUserInfo(w http.ResponseWriter, r *http.Request) {
-	context := func() *Session {
-		cookie, err := r.Cookie("session_token")
-		if err != nil || cookie.Value == "" {
-			return nil
-		}
-		session, ok := Sessions.Get(cookie.Value)
-		if !ok {
-			return nil
-		}
-		return &session
-	}()
-
+	context := Sessions.GetSessionInfo(r)
 	tmpl.ExecuteTemplate(w, "auth-block", context)
 }
 
@@ -478,6 +539,7 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Error in GetAllMovies :", err)
 		return
 	}
+	defer rows.Close()
 	for rows.Next() {
 		movie := &MovContext{Movie: &Movie{}}
 		err := rows.Scan(&movie.ID, &movie.Title, &movie.Genres)
@@ -525,4 +587,26 @@ func (h *Handler) SearchByTitle(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl.ExecuteTemplate(w, "search-results", Movies)
 
+}
+
+func (h *Handler) GetUserPage(w http.ResponseWriter, r *http.Request) {
+	userId, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || userId <= 0 {
+		http.Error(w, "Wrong user id!", http.StatusBadRequest)
+		return
+	}
+	user := &User{}
+	query := `SELECT userId, username, registerDate, admin, banUntil FROM users WHERE userId = ?`
+	if err := db.DB.QueryRow(query, userId).Scan(&user.Id, &user.Username, &user.RegisterDate, &user.Admin, &user.BanUntil); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "User not found!", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if user.BanUntil.After(time.Now()) {
+		user.Banned = true
+	}
+	utils.TemplateWrap(tmpl, w, "user-page", user, "index", nil)
 }

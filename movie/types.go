@@ -1,6 +1,7 @@
 package movie
 
 import (
+	"net/http"
 	"sync"
 	"time"
 )
@@ -47,8 +48,28 @@ type MovContext struct {
 }
 
 type User struct {
-	Id       int
-	Password string
+	Id           int
+	Password     string
+	Username     string
+	RegisterDate time.Time
+	Admin        bool
+	Banned       bool
+	BanUntil     time.Time
+}
+
+type Comment struct {
+	CommentId   int
+	UserId      int
+	CommentText string
+	PostedDT    string
+	Username    string
+	MovieId     string
+}
+
+type CommentsContext struct {
+	Comment
+	Last  bool
+	Owner bool //Comment owned by user
 }
 
 type Session struct {
@@ -73,6 +94,22 @@ func (ss *SessionsStore) Get(token string) (Session, bool) {
 	ss.mu.RLock()
 	s, ok := ss.Sessions[token]
 	return s, ok
+}
+
+// Get session info from a request
+func (ss *SessionsStore) GetSessionInfo(r *http.Request) *Session {
+	if r == nil {
+		return nil
+	}
+	cookie, err := r.Cookie("session_token")
+	if err != nil || cookie.Value == "" {
+		return nil
+	}
+	session, ok := ss.Get(cookie.Value)
+	if !ok {
+		return nil
+	}
+	return &session
 }
 
 func (ss *SessionsStore) Delete(token string) {

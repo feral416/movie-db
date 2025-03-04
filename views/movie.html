@@ -46,7 +46,7 @@
         </section>
       </div>
     </nav>
-      {{ .Htmlstr }}
+    {{ .Htmlstr }}
   </body>
 </html>
 {{ end }}
@@ -58,7 +58,7 @@
 {{ end }}
 
 {{ block "movie" .}}
-<section class="movie container">
+<section id="movie-section" class="movie container">
   <h2>{{.Movie.Title}}</h2>
   <img src="/movie/poster/{{ .Movie.ID }}">
   <ul class="container-fluid list-group list-group-horizontal pb-2">
@@ -68,12 +68,86 @@
       {{ end }}
     {{ end }}
   </ul>
-  <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-confirm="Are you sure?" class="btn btn-primary m-1">Delete</button>
-  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn btn-primary m-1">Edit</button>
-  <div id="movie-actions-result"></div>
-  {{ template "comments-section" . }}
+  <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-section" hx-target-error="#movie-actions-errors"
+          hx-confirm="Are you sure?" class="btn btn-primary m-1">
+          Delete
+  </button>
+  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-target-error="#movie-actions-errors"
+          hx-swap="innerHTML" class="btn btn-primary m-1">
+          Edit
+  </button>
+  <p id="movie-actions-errors"></p>
+  {{ block "comments-section" .Movie.ID }}
+    <section id="comments-section" class="container">
+      <h2>Comments</h2>
+        <form hx-post="/auth/movie/comment" class="form-control" hx-vals='{"movieId":"{{ . }}"}' hx-target-error="#comment-post-result" hx-target="#comments-section" hx-swap="innerHTML">
+          <input type="text" name="comment" class="form-control" required/>
+          <button type="submit" class="btn-btn-primary">Comment</button>
+        </form>
+        <div id="comment-post-result"></div>
+        <ul id="comments" class="container" hx-get="/movie/{{ . }}/comments/0" hx-trigger="load" hx-swap="innerHTML">
+        </ul>
+    </section>
+  {{ end }}
 </section>
 {{ end }}
+
+{{ block "edit-comment" . }}
+  <form hx-put="/auth/comment/edit" class="form-control" hx-vals='{"commentId":{{ . }}}' hx-target="#comment{{ . }}" hx-target-error="#edit-comment-result" hx-swap="innerHTML">
+    <input type="text" name="comment" class="form-control" required/>
+    <button type="submit" class="btn-btn-primary">Save</button>
+    <button type="button" hx-get="/movie/comment/{{ . }}" hx-target="#comment{{ . }}" hx-targer-error="#edit-comment-result" hx-swap="outerHTML" class="btn-close"></button>
+    <p id="edit-comment-result"></p>
+  </form>
+{{ end }}
+
+{{ block "comments" . }}
+  {{ if . }}
+    {{ range .}}
+      {{ if not .Last}}
+        <li id="delete-target{{ .CommentId }}">
+      {{ else }}
+        <li id="delete-target{{ .CommentId }}" hx-get="/movie/{{ .MovieId }}/comments/{{ .CommentId }}" hx-trigger="revealed" hx-swap="afterend">
+      {{ end }}
+          <div>
+            <a href="/user/{{ .UserId }}">{{ .Username }}</a><p>{{ .PostedDT }}</p>
+          </div>
+          <ul id="comment-menu">
+            {{ if .Owner }}
+              <li>
+                <button hx-get="/auth/comment/edit/{{ .CommentId }}" hx-target="#comment{{ .CommentId }}"
+                        hx-target-error="#comment{{ .CommentId }}-menu-errors">
+                        Edit
+                </button>
+              </li>
+              <li>
+                <button hx-delete="/auth/comment/delete/{{ .CommentId }}" hx-target="#delete-target{{ .CommentId }}" 
+                        hx-target-error="#comment{{ .CommentId }}-menu-errors" hx-confirm="Are you sure?">
+                        Delete
+                </button>
+              </li>
+            {{ end }}
+          </ul>
+          {{ block "comment" . }}
+          <div id="comment{{ .CommentId }}">
+            <p>{{ .CommentText }}</p>
+            <p id="comment{{ .CommentId }}-menu-errors"></p>
+          </div>
+          {{ end }}
+        </li>
+    {{ end }}
+  {{ else }}
+    <p>No comments.</p>
+  {{ end }}
+{{ end }}
+
+{{ block "deleted-comment" . }}
+  <p>Comment deleted.</p>
+{{ end }}
+
+{{ block "deleted-movie" . }}
+  <p>Movie deleted.</p>
+{{ end}}
 
 {{ block "movie-actions-result" . }}
   {{ if .Error }}
@@ -121,14 +195,14 @@
 <section id="add-movie" class="container">
   <h2 class="">Add Movie</h2>
 
-  <form hx-post="/movie/" hx-target="#add-movie" hx-indicator="#spinner" class="form-control">
+  <form hx-post="/movie/" hx-target="#add-movie" hx-target-error="#add-movie-errors" hx-indicator="#spinner" class="form-control">
     <div>
       <label for="film-title">Title</label>
-      <input type="text" value="{{ .Movie.Title }}" name="title" id="film-title" class="form-control" required />
+      <input type="text" name="title" id="film-title" class="form-control" required />
     </div>
     <div>
       <label for="film-genres">Genres</label>
-      <input type="text" value="{{ .Movie.Genres }}" name="genres" id="film-genres" class="form-control" />
+      <input type="text" name="genres" id="film-genres" class="form-control" />
     </div>
 
     <button type="submit" class="btn btn-primary">
@@ -136,12 +210,9 @@
     </button>
     <span class="spinner-border spinner-border-sm htmx-indicator" id="spinner" role="status" aria-hidden="true"></span>  
   </form>
-  {{ if .Errors }}
-    {{ range .Errors }}
-      <p>Error: {{ . }}</p>
-    {{ end }}
-  {{ else if .ID }}
-    <p>Movie added to database. ID is <a href="/movie/{{ .ID }}" title="Press to open created movie page!">{{ .ID }}</a></p>
+  <p id="add-movie-errors"></p>
+  {{ if . }}
+    <p>Movie added to database. ID is <a href="/movie/{{ . }}" title="Press to open created movie page!">{{ . }}</a></p>
   {{ end }}
 </section>
 {{ end }}
@@ -171,7 +242,7 @@
 
 {{ block "search-catalog" . }}
 <table hx-indicator=".htmx-indicator" class="table" id="search-table">
-  <tr hx-post="/movies/" hx-trigger="revealed" hx-swap="afterend swap:1s" hx-include="#catalog-search"><th scope="col">Title</th><th scope="col">Genres</th></tr>
+  <tr hx-post="/movies/" hx-trigger="revealed" hx-swap="afterend" hx-include="#catalog-search"><th scope="col">Title</th><th scope="col">Genres</th></tr>
 </table>
 {{ end }}
 
@@ -216,47 +287,41 @@
 {{ end }}
 
 {{ block "register-block" . }}
-<section class="container">
-  <h2>Registration page</h2>
-  <p>Password must be at least 8 character long, must include lower case letter, capital letter, number and special symbol. </p>
-  <form hx-post="/user/register" id="register-form" class="form-control" hx-target-error="#register-result" hx-swap="innerHTML">
-    <div>
-      <label for="username-field">Username</label>
-      <input type="text" name="username" id="username-field" class="form-control" required/>
-    </div>
-    <div>
-      <label for="password-field">Password</label>
-      <input type="password" name="password" id="password-field" class="form-control" required/>
-    </div>
-    <div>
-      <label for="confirm-password-field">Confirm password</label>
-      <input type="password" name="confirmPassword" id="confirm-password-field" class="form-control" required/>
-    </div>
-    <button type="submit" class="btn-btn-primary">
-      Register
-    </button>
-  </form>
-  <div id="register-result"></div>
-</section>
+  <section class="container">
+    <h2>Registration page</h2>
+    <p>Password must be at least 8 character long, must include lower case letter, capital letter, number and special symbol. </p>
+    <form hx-post="/user/register" id="register-form" class="form-control" hx-target-error="#register-result" hx-swap="innerHTML">
+      <div>
+        <label for="username-field">Username</label>
+        <input type="text" name="username" id="username-field" class="form-control" required/>
+      </div>
+      <div>
+        <label for="password-field">Password</label>
+        <input type="password" name="password" id="password-field" class="form-control" required/>
+      </div>
+      <div>
+        <label for="confirm-password-field">Confirm password</label>
+        <input type="password" name="confirmPassword" id="confirm-password-field" class="form-control" required/>
+      </div>
+      <button type="submit" class="btn-btn-primary">
+        Register
+      </button>
+    </form>
+    <div id="register-result"></div>
+  </section>
 {{ end }}
 
-{{ block "comments-section" . }}
-  <section class="container">
-    <h2>Comments</h2>
-    <form hx-post="auth/movie/comment" id="comment-form" class="form-control" hx-target-error="#comment-post-result" hx-swap="innerHTML">
-      <input type="text" name="comment" class="form-control" required/>
-      <button type="submit" class="btn-btn-primary">Comment</button>
-    </form>
-    <div id="comment-post-result"></div>
-    <ul id="comments" class="container">
-      <li>
-        <div>
-          <a href="/user/id">Username</a><p>25/02/25 12:00:00</p>
-        </div>
-        <p>Lorem ipsum commetn content</p>
-      </li>
-    </ul>
-
+{{ block "user-page" . }}
+  <section>
+    <h2>User page</h2>
+    <h3>{{ .Username }}</h3>
+    {{ if .Admin }}
+      <p>Administrator</p>
+    {{ end }}
+    <p>Registration date: {{ .RegisterDate }}</p>
+    {{ if .Banned }}
+      <p>Banned Until: {{ .BanUntil }}</p>
+    {{ end }}
   </section>
 {{ end }}
 
