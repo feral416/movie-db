@@ -2,7 +2,6 @@ package movie
 
 import (
 	"database/sql"
-	"fmt"
 	"html/template"
 	"io"
 	"log"
@@ -22,10 +21,16 @@ var tmpl = template.Must(template.ParseGlob("views/*.html"))
 type Handler struct{}
 
 func (h *Handler) GetIndex(w http.ResponseWriter, r *http.Request) {
-	tmpl.ExecuteTemplate(w, "index", "")
+	const templateName string = "index"
+	if err := tmpl.ExecuteTemplate(w, templateName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
+	const wrapperName, contentName string = "index", "movie"
 	query := `SELECT movieId, title, genres FROM movies WHERE movieId = ?`
 	movie := &Movie{}
 	err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&movie.ID, &movie.Title, &movie.Genres)
@@ -41,9 +46,9 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 
 	context := &Context{Movie: movie, Genres: movie.SplitGenresString()}
 
-	err = utils.TemplateWrap(tmpl, w, "movie", context, "index", "")
-	if err != nil {
-		log.Printf("Error wrapping template movie: %s", err)
+	if err = utils.TemplateWrap(tmpl, w, contentName, context, wrapperName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
 }
@@ -51,27 +56,32 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) GetPoster(w http.ResponseWriter, r *http.Request) {
 	fileBytes, err := os.ReadFile("assets/posters/" + r.PathValue("id") + ".png")
 	if err != nil {
-		bytes, err := os.ReadFile("assets/posters/no-poster.png")
+		fileBytes, err = os.ReadFile("assets/posters/no-poster.png")
 		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			log.Printf("Error reading the default poster: %s", err)
 			return
 		}
-		w.Write(bytes)
-		return
 	}
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Write(fileBytes)
+	if _, err = w.Write(fileBytes); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error writing writing image to response: %s", err)
+		return
+	}
 }
 
 func (h *Handler) AddMoviePage(w http.ResponseWriter, r *http.Request) {
-	err := utils.TemplateWrap(tmpl, w, "add-movie", nil, "index", "")
-	if err != nil {
-		log.Printf("Error wrapping template add-movie: %s", err)
+	const wrapperName, contentName string = "index", "add-movie"
+	if err := utils.TemplateWrap(tmpl, w, "add-movie", nil, "index", ""); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
 }
 
 func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "add-movie"
 	title := r.PostFormValue("title")
 	if title == "" {
 		http.Error(w, "Title can't be empty!", http.StatusBadRequest)
@@ -86,17 +96,22 @@ func (h *Handler) PostMovie(w http.ResponseWriter, r *http.Request) {
 	}
 	Id, _ := result.LastInsertId()
 	w.WriteHeader(http.StatusCreated)
-	tmpl.ExecuteTemplate(w, "add-movie", Id)
+	if err = tmpl.ExecuteTemplate(w, templateName, Id); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) DeleteMovie(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "deleted-movie"
 	idStr := r.PathValue("id")
-	id, err := strconv.Atoi(idStr)
-	if err != nil || id <= 0 {
+	if id, err := strconv.Atoi(idStr); err != nil || id < 0 {
 		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
+		return
 	}
 	query := `DELETE FROM movies WHERE movieId = ?`
-	result, err := db.DB.Exec(query, id)
+	result, err := db.DB.Exec(query, idStr)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Printf("Error while deleting a movie: %s", err)
@@ -106,109 +121,153 @@ func (h *Handler) DeleteMovie(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Movie doesn't exist!", http.StatusBadRequest)
 		return
 	}
+	//Potential error is not handled because poster may not exist
 	os.Remove("assets/posters/" + idStr + ".png")
-	tmpl.ExecuteTemplate(w, "deleted-movie", nil)
+	if err = tmpl.ExecuteTemplate(w, templateName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) GetEditMovieForm(w http.ResponseWriter, r *http.Request) {
-	context := NewMovieActionsContext()
-	query := `SELECT * FROM movies WHERE movieId = ?`
-	err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&context.ID, &context.Title, &context.Genres)
-	if err != nil {
-		context.Error = "Error while getting movie information from the DB!"
+	movie := &Movie{}
+	const formName string = "movie-edit-form"
+	id := r.PathValue("id")
+	if v, err := strconv.Atoi(id); err != nil || v < 0 {
+		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
+		return
 	}
-	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+	query := `SELECT movieId, title, genres FROM movies WHERE movieId = ?`
+	err := db.DB.QueryRow(query, id).Scan(&movie.ID, &movie.Title, &movie.Genres)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error while getting movie information from a DB: %s", err)
+		return
+	}
+	if err = tmpl.ExecuteTemplate(w, formName, movie); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", formName, err)
+		return
+	}
+
 }
 
 func (h *Handler) EmptyResponse(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprint(w, "")
+	//fmt.Fprint(w, "")
 }
 
 func (h *Handler) UpdateMovie(w http.ResponseWriter, r *http.Request) {
-	context := NewMovieActionsContext()
+	strId := r.PathValue("id")
+	id, err := strconv.Atoi(strId)
 	title := r.PostFormValue("title")
-	if utf8.RuneCount([]byte(title)) < 1 {
-		context.Error = "Movie not updated: title too short!"
-	} else {
-		query := `UPDATE movies SET title = ?, genres = ? WHERE movieId = ?`
-		result, err := db.DB.Exec(query, title, r.PostFormValue("genres"), r.PathValue("id"))
-		if err != nil {
-			context.Error = "Error while updating a movie in database!"
-		} else if n, _ := result.RowsAffected(); n == 1 {
-			context.Msg = "Movie updated successfully."
-		} else {
-			context.Error = "Something wrong: movie might have been deleted!"
-		}
+	if title == "" || id < 0 || err != nil {
+		http.Error(w, "Invalid id or title!", http.StatusBadRequest)
+		return
 	}
-	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
+	query := `UPDATE movies SET title = ?, genres = ? WHERE movieId = ?`
+	result, err := db.DB.Exec(query, title, r.PostFormValue("genres"), id)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error while updating a movie in database: %s", err)
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		http.Error(w, "Something wrong: movie not updated!", http.StatusBadRequest)
+		return
+	}
+	w.Header().Add("HX-Redirect", "/movie/"+strId)
 }
 
 func (h *Handler) UpdatePoster(w http.ResponseWriter, r *http.Request) {
-	context := func() *MovieActionsContext {
-		context := NewMovieActionsContext()
-		const MB int64 = 1 << 20 //megabyte size
-		id := r.PathValue("id")
+	const MB int64 = 1 << 20 //megabyte size
+	strId := r.PathValue("id")
+	id, err := strconv.Atoi(strId)
+	if err != nil || id < 0 {
+		http.Error(w, "Wrong id!", http.StatusBadRequest)
+		return
+	}
 
-		if id == "" {
-			context.Error = "Wrong movie id!"
-			tmpl.ExecuteTemplate(w, "movie-actions-result", context)
-			return context
+	var exists bool
+	query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
+	if err := db.DB.QueryRow(query, id).Scan(&exists); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Movie doesn't exist!", http.StatusBadRequest)
+			return
 		}
-		var exists bool
-		query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
-		if err := db.DB.QueryRow(query, id).Scan(&exists); err != nil {
-			context.Error = "No connection to db or movie doesn't exist in db!"
-			return context
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Problem with db: %s", err)
+		return
+	}
+	if err := r.ParseMultipartForm(MB); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error while parsing the file: %s", err)
+		return
+	}
+	formFile, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error retrieving the file: %s", err)
+		return
+	}
+	defer func() {
+		if err = formFile.Close(); err != nil {
+			log.Printf("Error closing the file: %s", err)
+			return
 		}
-		if err := r.ParseMultipartForm(MB); err != nil {
-			context.Error = "Error while parsing the file!"
-			return context
-		}
-		formFile, header, err := r.FormFile("file")
-		if err != nil {
-			context.Error = "Error retrieving the file!"
-			return context
-		}
-		defer formFile.Close()
-		if header.Size > 1*MB {
-			context.Error = "File larger than 1MB!"
-			return context
-		}
-		formFileBytes, err := io.ReadAll(formFile)
-		if err != nil {
-			context.Error = "Error reading the file!"
-			return context
-		}
-		if ct := http.DetectContentType(formFileBytes); ct != "image/png" {
-			context.Error = "File is not a png image!"
-			return context
-		}
-		newFile, err := os.Create("assets/posters/" + id + ".png")
-		if err != nil {
-			context.Error = "Error creating the file!"
-			return context
-		}
-		defer newFile.Close()
-		newFile.Write(formFileBytes)
-		context.Msg = "File uploaded. Size: " + strconv.FormatInt(header.Size, 10)
-		return context
 	}()
-
-	tmpl.ExecuteTemplate(w, "movie-actions-result", context)
-
+	if header.Size > 1*MB {
+		http.Error(w, "File larger than 1MB!", http.StatusBadRequest)
+		return
+	}
+	formFileBytes, err := io.ReadAll(formFile)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error reading the file: %s", err)
+		return
+	}
+	if ct := http.DetectContentType(formFileBytes); ct != "image/png" {
+		http.Error(w, "File is not a png image!", http.StatusBadRequest)
+		return
+	}
+	newFile, err := os.Create("assets/posters/" + strId + ".png")
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error creating the file: %s", err)
+		return
+	}
+	defer func() {
+		if err := newFile.Close(); err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Error closing new file on server: %s", err)
+			return
+		}
+	}()
+	if _, err = newFile.Write(formFileBytes); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error writing the wile on disc: %s", err)
+		return
+	}
+	//"File uploaded. Size: " + strconv.FormatInt(header.Size, 10)
+	w.Header().Add("HX-Redirect", "/movie/"+strId)
 }
 
 func (h *Handler) GetAllMovies(w http.ResponseWriter, r *http.Request) {
-
-	err := utils.TemplateWrap(tmpl, w, "all-movies", "", "index", "")
-	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	const wrapperName, contentName string = "index", "all-movies"
+	if err := utils.TemplateWrap(tmpl, w, contentName, "", wrapperName, ""); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
 }
 
 func (h *Handler) RealodSearchCatalog(w http.ResponseWriter, r *http.Request) {
-	tmpl.ExecuteTemplate(w, "search-catalog", "")
+	const templateName string = "search-catalog"
+	if err := tmpl.ExecuteTemplate(w, templateName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
@@ -233,6 +292,7 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT EXISTS(SELECT * FROM users WHERE username = ?)`
 	if err := db.DB.QueryRow(query, username).Scan(&exists); err != nil {
 		http.Error(w, "DB error!", http.StatusInternalServerError)
+		log.Printf("Error checking username existanse in db: %s", err)
 		return
 	}
 	if exists {
@@ -242,26 +302,31 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 	hashedPassword, err := utils.HashPassword(password)
 	if err != nil {
 		http.Error(w, "Error hashing password!", http.StatusInternalServerError)
+		log.Printf("Error hashing password: %s", err)
 		return
 	}
 	query = `INSERT INTO users (username, password) VALUES (?, ?)`
 	result, err := db.DB.Exec(query, username, hashedPassword)
 	if err != nil {
-		http.Error(w, "DB error!", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error inserting user to db: %s", err)
 		return
 	}
 	_, err = result.LastInsertId()
 	if err != nil {
 		http.Error(w, "Error getting last insert ID:", http.StatusInternalServerError)
+		log.Printf("Error getting last insert ID: %s", err)
 		return
 	}
 	w.Header().Add("HX-Redirect", "/login")
 }
 
 func (h *Handler) GetRegistrationPage(w http.ResponseWriter, r *http.Request) {
-	err := utils.TemplateWrap(tmpl, w, "register-block", "", "index", "")
+	const wrapperName, contentName string = "index", "register-block"
+	err := utils.TemplateWrap(tmpl, w, "contentName", nil, wrapperName, nil)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
 }
@@ -280,7 +345,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 			return
 		}
-		http.Error(w, "DB error!", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting user from db: %s", err)
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
@@ -290,7 +356,8 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	const tokenLenght = 32
 	token, err := utils.GenerateToken(tokenLenght)
 	if err != nil {
-		http.Error(w, "Error generating token!", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error generating token: %s", err)
 		return
 	}
 	session := Session{user.Id, username, time.Now().Add(time.Hour * 24)}
@@ -305,12 +372,13 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 	})
 	w.Header().Add("HX-Redirect", "/")
-	//http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (h *Handler) GetLoginPage(w http.ResponseWriter, r *http.Request) {
-	if err := utils.TemplateWrap(tmpl, w, "login-block", "", "index", ""); err != nil {
+	const wrapperName, contentName string = "index", "login-block"
+	if err := utils.TemplateWrap(tmpl, w, contentName, nil, wrapperName, nil); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
 
@@ -319,7 +387,8 @@ func (h *Handler) GetLoginPage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err != nil {
-		http.Error(w, "No cookie!", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting cookie: %s", err)
 		return
 	}
 	Sessions.Delete(cookie.Value)
@@ -332,79 +401,94 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
-	//http.Redirect(w, r, "/", http.StatusSeeOther)
-	w.WriteHeader(http.StatusOK)
-	fmt.Println("User logged out")
+	w.Header().Add("HX-Redirect", "/")
 }
 
 func (h *Handler) PostComment(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "comments-section"
 	comment := r.PostFormValue("comment")
 	if comment == "" {
-		http.Error(w, "Comment can't be empty", http.StatusBadRequest)
+		http.Error(w, "Comment can't be empty!", http.StatusBadRequest)
 		return
 	}
 	movieId := r.PostFormValue("movieId")
-	if movieId == "" {
-		http.Error(w, "No movie id", http.StatusBadRequest)
+	if v, err := strconv.Atoi(movieId); err != nil || v < 0 {
+		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
 		return
 	}
 	session, ok := r.Context().Value(S).(Session)
 	if !ok {
-		http.Error(w, "Server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting session from context in PostComment")
 		return
 	}
 	query := `SELECT EXISTS(SELECT * FROM movies WHERE movieId = ?)`
 	var exists bool
 	if err := db.DB.QueryRow(query, movieId).Scan(&exists); err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error checking movie existance in db: %s", err)
 		return
 	}
 	if !exists {
-		http.Error(w, "Movie doesn't exist", http.StatusBadRequest)
+		http.Error(w, "Movie doesn't exist!", http.StatusBadRequest)
 		return
 	}
 
 	query = `INSERT INTO comments (userId, movieId, comment) VALUES (?, ?, ?)`
 	res, err := db.DB.Exec(query, session.UserId, movieId, comment)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error inserting comment into db: %s", err)
 		return
 	}
 	_, err = res.LastInsertId()
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting last insert ID: %s", err)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "comments-section", movieId)
+	if err := tmpl.ExecuteTemplate(w, templateName, movieId); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
-	commentId, err := strconv.Atoi(r.PathValue("commentId"))
-	if err != nil || commentId <= 0 {
+	const templateName string = "deleted-comment"
+	commentId := r.PathValue("commentId")
+	if v, err := strconv.Atoi(commentId); err != nil || v < 0 {
 		http.Error(w, "Wrong comment id!", http.StatusBadRequest)
 		return
 	}
 	session, ok := r.Context().Value(S).(Session)
 	if !ok {
-		http.Error(w, "Server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting session from context in DeleteComment")
 		return
 	}
 	query := `DELETE FROM comments WHERE commentId = ? AND userId = ?`
 	sqlRes, err := db.DB.Exec(query, commentId, session.UserId)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error deleting comment from db: %s", err)
 		return
 	}
 	if n, _ := sqlRes.RowsAffected(); n == 0 {
 		http.Error(w, "Comment doesn't exist or you are not the author", http.StatusBadRequest)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "deleted-comment", nil)
+	if err := tmpl.ExecuteTemplate(w, templateName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
-	commentId, err := strconv.Atoi(r.PostFormValue("commentId"))
-	if err != nil || commentId <= 0 {
+	const templateName string = "comment"
+	commentId := r.PostFormValue("commentId")
+	if v, err := strconv.Atoi(commentId); err != nil || v < 0 {
 		http.Error(w, "Wrong comment id!", http.StatusBadRequest)
 		return
 	}
@@ -415,46 +499,66 @@ func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 	}
 	session, ok := r.Context().Value(S).(Session)
 	if !ok {
-		http.Error(w, "Server error", http.StatusInternalServerError)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting session from context in UpdateComment")
 		return
 	}
 	query := `UPDATE comments SET comment = ? WHERE commentId = ? AND userId = ?`
 	sqlRes, err := db.DB.Exec(query, comment, commentId, session.UserId)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		fmt.Println(err)
+		log.Printf("Error updating comment in db: %s", err)
 		return
 	}
 	if n, _ := sqlRes.RowsAffected(); n == 0 {
-		http.Error(w, "Comment doesn't exist or you are not the author", http.StatusBadRequest)
+		http.Error(w, "Comment doesn't exist or you are not the author!", http.StatusBadRequest)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "comment", struct {
-		CommentId   int
+	err = tmpl.ExecuteTemplate(w, templateName, struct {
+		CommentId   string
 		CommentText string
 	}{commentId, comment})
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) GetComments(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "comments"
 	const commentsPerQuery = 20
 	session := Sessions.GetSessionInfo(r)
 	ctxSlice := []CommentsContext{}
 	movieId := r.PathValue("id")
+	if v, err := strconv.Atoi(movieId); err != nil || v < 0 {
+		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
+		return
+	}
 	lastCommentId := r.PathValue("last_comment_id")
+	if v, err := strconv.Atoi(lastCommentId); err != nil || v < 0 {
+		http.Error(w, "Wrong last comment id!", http.StatusBadRequest)
+		return
+	}
 	query := "CALL GetComments(?, ?, ?)"
 	rows, err := db.DB.Query(query, movieId, lastCommentId, commentsPerQuery)
 	if err != nil {
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		fmt.Println(err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting comments from db: %s", err)
 		return
 	}
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Error closing rows: %s", err)
+			return
+		}
+	}()
 	for rows.Next() {
 		comment := &CommentsContext{}
 		err := rows.Scan(&comment.CommentText, &comment.PostedDT, &comment.UserId, &comment.CommentId, &comment.Username)
 		if err != nil {
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			fmt.Println(err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Error scanning a row: %s", err)
 			return
 		}
 		if session != nil {
@@ -466,13 +570,46 @@ func (h *Handler) GetComments(w http.ResponseWriter, r *http.Request) {
 		ctxSlice[commentsPerQuery-1].Last = true
 		ctxSlice[commentsPerQuery-1].MovieId = movieId
 	}
-	tmpl.ExecuteTemplate(w, "comments", ctxSlice)
-
+	if err := tmpl.ExecuteTemplate(w, templateName, ctxSlice); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) GetComment(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "comment"
 	commentId, err := strconv.Atoi(r.PathValue("commentId"))
-	if err != nil || commentId <= 0 {
+	if err != nil || commentId < 0 {
+		http.Error(w, "Wrong comment id!", http.StatusBadRequest)
+		return
+	}
+	query := `SELECT comment FROM comments WHERE commentId = ?`
+	var commentText string
+	if err := db.DB.QueryRow(query, commentId).Scan(&commentText); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Comment not found!", http.StatusBadRequest)
+			return
+		}
+		http.Error(w, "Internal server error!", http.StatusInternalServerError)
+		log.Printf("Error getting comment from db: %s", err)
+		return
+	}
+	err = tmpl.ExecuteTemplate(w, templateName, struct {
+		CommentId   int
+		CommentText string
+	}{commentId, commentText})
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
+}
+
+func (h *Handler) GetCommentEditForm(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "edit-comment"
+	commentId, err := strconv.Atoi(r.PathValue("commentId"))
+	if err != nil || commentId < 0 {
 		http.Error(w, "Wrong comment id", http.StatusBadRequest)
 		return
 	}
@@ -480,33 +617,36 @@ func (h *Handler) GetComment(w http.ResponseWriter, r *http.Request) {
 	var commentText string
 	if err := db.DB.QueryRow(query, commentId).Scan(&commentText); err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Not found", http.StatusBadRequest)
+			http.Error(w, "Comment not found!", http.StatusBadRequest)
 			return
 		}
 		http.Error(w, "Internal server error!", http.StatusInternalServerError)
+		log.Printf("Error getting comment from db: %s", err)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "comment", struct {
+	err = tmpl.ExecuteTemplate(w, templateName, struct {
 		CommentId   int
 		CommentText string
 	}{commentId, commentText})
-}
-
-func (h *Handler) GetCommentEditForm(w http.ResponseWriter, r *http.Request) {
-	commentId, err := strconv.Atoi(r.PathValue("commentId"))
-	if err != nil || commentId <= 0 {
-		http.Error(w, "Wrong comment id", http.StatusBadRequest)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
 		return
 	}
-	tmpl.ExecuteTemplate(w, "edit-comment", commentId)
 }
 
 func (h *Handler) GetUserInfo(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "auth-block"
 	context := Sessions.GetSessionInfo(r)
-	tmpl.ExecuteTemplate(w, "auth-block", context)
+	if err := tmpl.ExecuteTemplate(w, templateName, context); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
+	const templateName string = "movie-rows"
 	const recordsPerPage int = 20
 	const idColumnName = " movieId "
 	const titleColumnName = " title "
@@ -536,7 +676,8 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 
 	rows, err := db.DB.Query(query, prompt, sortPrmVal, recordsPerPage)
 	if err != nil {
-		fmt.Println("Error in GetAllMovies :", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error in GetAllMovies : %s", err)
 		return
 	}
 	defer rows.Close()
@@ -544,7 +685,9 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 		movie := &MovContext{Movie: &Movie{}}
 		err := rows.Scan(&movie.ID, &movie.Title, &movie.Genres)
 		if err != nil {
-			fmt.Println("Error in GetAllMovies while scanning a row :", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Error while scanning a row: %s", err)
+			return
 		}
 		Movies = append(Movies, *movie)
 	}
@@ -558,11 +701,16 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 	}
 	//lag for testing loading indicator
 	//time.Sleep(5 * time.Second)
-	tmpl.ExecuteTemplate(w, "movie-rows", Movies)
+	if err := tmpl.ExecuteTemplate(w, templateName, Movies); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) SearchByTitle(w http.ResponseWriter, r *http.Request) {
 	//time.Sleep(5 * time.Second)
+	const templateName string = "search-results"
 	const searchLimit int = 10
 	userInput := r.PostFormValue("search")
 	Movies := make([]Movie, 0)
@@ -573,25 +721,31 @@ func (h *Handler) SearchByTitle(w http.ResponseWriter, r *http.Request) {
 	query := `SELECT movieID, title FROM movies WHERE title LIKE ? LIMIT ?`
 	rows, err := db.DB.Query(query, userInput, searchLimit)
 	if err != nil {
-		//TODO: add error logging
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error getting seraching movies in db: %s", err)
 		return
 	}
 	for rows.Next() {
 		movie := &Movie{}
 
 		if err := rows.Scan(&movie.ID, &movie.Title); err != nil {
-			fmt.Println("Error while scanning a row!")
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Error while scanning a row: %s", err)
 			return
 		}
 		Movies = append(Movies, *movie)
 	}
-	tmpl.ExecuteTemplate(w, "search-results", Movies)
-
+	if err := tmpl.ExecuteTemplate(w, templateName, Movies); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error executing template %s: %s", templateName, err)
+		return
+	}
 }
 
 func (h *Handler) GetUserPage(w http.ResponseWriter, r *http.Request) {
+	const wrapperName, contentName string = "index", "user-page"
 	userId, err := strconv.Atoi(r.PathValue("id"))
-	if err != nil || userId <= 0 {
+	if err != nil || userId < 0 {
 		http.Error(w, "Wrong user id!", http.StatusBadRequest)
 		return
 	}
@@ -603,10 +757,15 @@ func (h *Handler) GetUserPage(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		log.Printf("Error getting user from db: %s", err)
 		return
 	}
 	if user.BanUntil.After(time.Now()) {
 		user.Banned = true
 	}
-	utils.TemplateWrap(tmpl, w, "user-page", user, "index", nil)
+	if err := utils.TemplateWrap(tmpl, w, contentName, user, wrapperName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
+		return
+	}
 }

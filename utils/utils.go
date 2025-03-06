@@ -11,7 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// Wraps one template into another. In wrapper target should be named as {{ .Htmlstr }}, and wrapper data named Data
+// Wraps one template into another.
 func TemplateWrap(tmpl *template.Template, w io.Writer, targetName string, targetData any, wrapperName string, wrapperData any) error {
 	buff := &strings.Builder{}
 	err := tmpl.ExecuteTemplate(buff, targetName, targetData)

@@ -72,10 +72,12 @@
           hx-confirm="Are you sure?" class="btn btn-primary m-1">
           Delete
   </button>
-  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-actions-result" hx-target-error="#movie-actions-errors"
+  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-edit-form" hx-target-error="#movie-actions-errors"
           hx-swap="innerHTML" class="btn btn-primary m-1">
           Edit
   </button>
+  <div id="movie-edit-form">
+  </div>
   <p id="movie-actions-errors"></p>
   {{ block "comments-section" .Movie.ID }}
     <section id="comments-section" class="container">
@@ -93,10 +95,10 @@
 {{ end }}
 
 {{ block "edit-comment" . }}
-  <form hx-put="/auth/comment/edit" class="form-control" hx-vals='{"commentId":{{ . }}}' hx-target="#comment{{ . }}" hx-target-error="#edit-comment-result" hx-swap="innerHTML">
-    <input type="text" name="comment" class="form-control" required/>
+  <form hx-put="/auth/comment/edit" class="form-control" hx-vals='{"commentId":{{ .CommentId }}}' hx-target="#comment{{ .CommentId }}" hx-target-error="#edit-comment-result" hx-swap="innerHTML">
+    <input type="text" name="comment" value="{{ .CommentText }}" class="form-control" required/>
     <button type="submit" class="btn-btn-primary">Save</button>
-    <button type="button" hx-get="/movie/comment/{{ . }}" hx-target="#comment{{ . }}" hx-targer-error="#edit-comment-result" hx-swap="outerHTML" class="btn-close"></button>
+    <button type="button" hx-get="/movie/comment/{{ .CommentId }}" hx-target="#comment{{ .CommentId }}" hx-targer-error="#edit-comment-result" hx-swap="outerHTML" class="btn-close"></button>
     <p id="edit-comment-result"></p>
   </form>
 {{ end }}
@@ -149,38 +151,29 @@
   <p>Movie deleted.</p>
 {{ end}}
 
-{{ block "movie-actions-result" . }}
-  {{ if .Error }}
-    <p style="color: red">{{ .Error }}</p>
-  {{ else if .Msg }}
-    <p style="color: green">{{ .Msg }}</p>
-  {{ else }} 
-    {{ template "movie-edit-form" . }}
-  {{ end }}
-{{ end }}
-
 {{ block "movie-edit-form" . }}
   <div class="container form-control">
     <div class="d-flex flex-row justify-content-between">
       <h2>Edit movie</h2>
-      <button type="button" hx-get="/empty" hx-target="#movie-actions-result" hx-swap="innerHTML" class="btn-close"></button>
+      <button type="button" hx-get="/empty" hx-target="#movie-edit-form" hx-target-error="#movie-actions-errors" hx-swap="innerHTML" class="btn-close"></button>
     </div>
-    <form hx-put="/movie/{{ .ID }}" hx-target="#movie-actions-result" hx-swap="innerHTML" hx-indicator=".htmx-indicator" hx-confirm="Sure?">
+    <form hx-put="/movie/{{ .ID }}" hx-target-error="#movie-actions-errors" hx-swap="innerHTML" hx-indicator=".htmx-indicator" hx-confirm="Sure?">
       <div>
         <label for="film-title">Title</label>
-        <input type="text" value="{{ .Movie.Title }}" name="title" id="film-title" class="form-control" required />
+        <input type="text" value="{{ .Title }}" name="title" id="film-title" class="form-control" required />
       </div>
       <div>
         <label for="film-genres">Genres</label>
-        <input type="text" value="{{ .Movie.Genres }}" name="genres" id="film-genres" class="form-control" />
+        <input type="text" value="{{ .Genres }}" name="genres" id="film-genres" class="form-control" />
       </div>
       <button type="submit" class="btn btn-primary">
         <span class="htmx-indicator m-1"></span>
         Save
       </button> 
     </form>
-    <form hx-encoding="multipart/form-data" hx-put="/movie/poster/{{ .Movie.ID }}"
-        _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100'>
+    <form hx-encoding="multipart/form-data" hx-put="/movie/poster/{{ .ID }}"
+          _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100'
+          hx-target-error="#movie-actions-errors" hx-swap="innerHTML">
       <label class="form-label" for="input-file">Choose poster file. Allowed png up to 1MB!</label>
       <input class="form-control" id="input-file" type="file" name="file">
       <button class="btn btn-primary m-1">
@@ -219,7 +212,7 @@
 
 {{ block "all-movies" .}}
   <main class="container">
-    <form hx-post="/movies/reload" id="catalog-search" hx-target="#search-table" hx-swap="innerHTML" hx-trigger="input edit change delay: 500ms">
+    <form hx-post="/movies/reload" id="catalog-search" hx-target="#search-table" hx-swap="innerHTML" hx-trigger="input changed delay:500ms">
       <input class="form-control " type="search" name="prompt" placeholder="Search">
       <label for="sort-by">Sort:</label>
       <select class="form-control" id="sort-by" name="sort-by">
@@ -261,7 +254,7 @@
     <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
   {{ else }} 
     <li class="nav-item"><a class="nav-link" href="/user/{{ .UserId }}">{{ .Username }}</a></li>
-    <li class="nav-item"><a class="nav-link" hx-post="auth/user/logout">Logout</a></li>
+    <li class="nav-item"><a class="nav-link" hx-post="/auth/user/logout">Logout</a></li>
   {{ end }}
 {{ end }}
 
