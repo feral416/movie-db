@@ -44,7 +44,10 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	context := &Context{Movie: movie, Genres: movie.SplitGenresString()}
+	context := &struct {
+		Movie  *Movie
+		Genres []string
+	}{Movie: movie, Genres: movie.SplitGenresString()}
 
 	if err = utils.TemplateWrap(tmpl, w, contentName, context, wrapperName, nil); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -323,7 +326,7 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetRegistrationPage(w http.ResponseWriter, r *http.Request) {
 	const wrapperName, contentName string = "index", "register-block"
-	err := utils.TemplateWrap(tmpl, w, "contentName", nil, wrapperName, nil)
+	err := utils.TemplateWrap(tmpl, w, contentName, nil, wrapperName, nil)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
@@ -332,17 +335,19 @@ func (h *Handler) GetRegistrationPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
+	const tokenLenght = 32
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
 	if username == "" || password == "" {
 		http.Error(w, "Username or password can't be empty!", http.StatusBadRequest)
 		return
 	}
-	query := `SELECT userId, password FROM users WHERE username = ?`
+	query := `SELECT userId, password, admin, banUntil FROM users WHERE username = ?`
 	user := &User{}
-	if err := db.DB.QueryRow(query, username).Scan(&user.Id, &user.Password); err != nil {
+	banUntil := &time.Time{}
+	if err := db.DB.QueryRow(query, username).Scan(&user.Id, &user.Password, &user.Admin, banUntil); err != nil {
 		if err == sql.ErrNoRows {
-			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+			http.Error(w, "Invalid username or password!", http.StatusUnauthorized)
 			return
 		}
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -350,17 +355,20 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		http.Error(w, "Invalid username or password", http.StatusUnauthorized)
+		http.Error(w, "Invalid username or password!", http.StatusUnauthorized)
 		return
 	}
-	const tokenLenght = 32
+	if banUntil.After(time.Now()) {
+		http.Error(w, "You are banned until "+banUntil.Format(time.DateTime), http.StatusForbidden)
+		return
+	}
 	token, err := utils.GenerateToken(tokenLenght)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Printf("Error generating token: %s", err)
 		return
 	}
-	session := Session{user.Id, username, time.Now().Add(time.Hour * 24)}
+	session := Session{user.Id, username, user.Admin, time.Now().Add(time.Hour * 24)}
 	Sessions.Create(session, token)
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
@@ -467,8 +475,8 @@ func (h *Handler) DeleteComment(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error getting session from context in DeleteComment")
 		return
 	}
-	query := `DELETE FROM comments WHERE commentId = ? AND userId = ?`
-	sqlRes, err := db.DB.Exec(query, commentId, session.UserId)
+	query := `CALL DeleteComment(?, ?)`
+	sqlRes, err := db.DB.Exec(query, session.UserId, commentId)
 	if err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Printf("Error deleting comment from db: %s", err)
@@ -503,8 +511,8 @@ func (h *Handler) UpdateComment(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error getting session from context in UpdateComment")
 		return
 	}
-	query := `UPDATE comments SET comment = ? WHERE commentId = ? AND userId = ?`
-	sqlRes, err := db.DB.Exec(query, comment, commentId, session.UserId)
+	query := `CALL SetComment(?, ?, ?)`
+	sqlRes, err := db.DB.Exec(query, session.UserId, commentId, comment)
 	if err != nil {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		log.Printf("Error updating comment in db: %s", err)
@@ -562,7 +570,7 @@ func (h *Handler) GetComments(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if session != nil {
-			comment.Owner = session.UserId == comment.UserId
+			comment.Owner = (session.UserId == comment.UserId) || session.Admin
 		}
 		ctxSlice = append(ctxSlice, *comment)
 	}
@@ -672,7 +680,7 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 		sortPrmVal = lastElement
 	}
 
-	query := `SELECT * FROM movies WHERE title LIKE ? AND ` + whereColumnName + whereCondition + `ORDER BY` + whereColumnName + orderQueryPart + `LIMIT ?`
+	query := `SELECT movieId, title, genres FROM movies WHERE title LIKE ? AND ` + whereColumnName + whereCondition + `ORDER BY` + whereColumnName + orderQueryPart + `LIMIT ?`
 
 	rows, err := db.DB.Query(query, prompt, sortPrmVal, recordsPerPage)
 	if err != nil {
@@ -750,8 +758,9 @@ func (h *Handler) GetUserPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := &User{}
+	var banUntil, registerDate time.Time
 	query := `SELECT userId, username, registerDate, admin, banUntil FROM users WHERE userId = ?`
-	if err := db.DB.QueryRow(query, userId).Scan(&user.Id, &user.Username, &user.RegisterDate, &user.Admin, &user.BanUntil); err != nil {
+	if err := db.DB.QueryRow(query, userId).Scan(&user.Id, &user.Username, &registerDate, &user.Admin, &banUntil); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "User not found!", http.StatusNotFound)
 			return
@@ -760,9 +769,11 @@ func (h *Handler) GetUserPage(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error getting user from db: %s", err)
 		return
 	}
-	if user.BanUntil.After(time.Now()) {
+	if banUntil.After(time.Now()) {
 		user.Banned = true
+		user.BanUntil = banUntil.Format(time.DateTime)
 	}
+	user.RegisterDate = registerDate.Format(time.DateTime)
 	if err := utils.TemplateWrap(tmpl, w, contentName, user, wrapperName, nil); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)

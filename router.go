@@ -17,6 +17,12 @@ func loadRoutes(router *http.ServeMux) {
 		middleware.Logging,
 	)
 
+	adminStack := middleware.CreateStack(
+		middleware.Logging,
+		middleware.Auth,
+		middleware.Admin,
+	)
+
 	handler := &movie.Handler{}
 	fileHandler := http.StripPrefix("/static/", http.FileServer(http.Dir("static")))
 	//public routes
@@ -26,13 +32,8 @@ func loadRoutes(router *http.ServeMux) {
 	public.HandleFunc("GET /movies/", handler.GetAllMovies)
 	public.HandleFunc(`POST /movies/`, handler.GetAllMoviesHTMX)
 	public.HandleFunc(`POST /movies/reload`, handler.RealodSearchCatalog)
-	public.HandleFunc("GET /movie/add", handler.AddMoviePage)
 	public.HandleFunc("GET /movie/poster/{id}", handler.GetPoster)
-	public.HandleFunc("POST /movie/", handler.PostMovie)
 	public.HandleFunc("DELETE /movie/{id}", handler.DeleteMovie)
-	public.HandleFunc("GET /movie/edit/{id}", handler.GetEditMovieForm)
-	public.HandleFunc("PUT /movie/{id}", handler.UpdateMovie)
-	public.HandleFunc("PUT /movie/poster/{id}", handler.UpdatePoster)
 	public.HandleFunc("GET /movie/{id}/comments/{last_comment_id}", handler.GetComments)
 	public.HandleFunc("GET /movie/comment/{commentId}", handler.GetComment)
 	public.HandleFunc("POST /search", handler.SearchByTitle)
@@ -50,9 +51,17 @@ func loadRoutes(router *http.ServeMux) {
 	protected.HandleFunc("GET /comment/edit/{commentId}", handler.GetCommentEditForm)
 	protected.HandleFunc("PUT /comment/edit", handler.UpdateComment)
 	protected.HandleFunc("DELETE /comment/delete/{commentId}", handler.DeleteComment)
+	//admin routes
+	admin := http.NewServeMux()
+	admin.HandleFunc("GET /movie/add", handler.AddMoviePage)
+	admin.HandleFunc("POST /movie/", handler.PostMovie)
+	admin.HandleFunc("GET /movie/edit/{id}", handler.GetEditMovieForm)
+	admin.HandleFunc("PUT /movie/{id}", handler.UpdateMovie)
+	admin.HandleFunc("PUT /movie/poster/{id}", handler.UpdatePoster)
 	//combining all routes
 	router.Handle("/", publicStack(public))
 	router.Handle("/auth/", http.StripPrefix("/auth", protectedStack(protected)))
+	router.Handle("/admin/", http.StripPrefix("/admin", adminStack(admin)))
 
 	router.Handle("/static/", fileHandler)
 }

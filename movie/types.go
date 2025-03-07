@@ -13,35 +13,6 @@ const S sessionContextKey = "session"
 
 var Sessions *SessionsStore
 
-type Context struct {
-	Movie  *Movie
-	Genres []string
-}
-
-type MovieActionsContext struct {
-	*Movie
-	Error string
-	Msg   string
-}
-
-func NewMovieActionsContext() *MovieActionsContext {
-	return &MovieActionsContext{Movie: &Movie{}}
-}
-
-type ContextAddMovie struct {
-	Movie  *Movie
-	Errors []string
-	ID     int64
-}
-
-func newEmptyContextAddMovie() (c *ContextAddMovie) {
-	return &ContextAddMovie{
-		&Movie{},
-		[]string{},
-		0,
-	}
-}
-
 type MovContext struct {
 	*Movie
 	Last string
@@ -51,10 +22,10 @@ type User struct {
 	Id           int
 	Password     string
 	Username     string
-	RegisterDate time.Time
+	RegisterDate string
 	Admin        bool
 	Banned       bool
-	BanUntil     time.Time
+	BanUntil     string
 }
 
 type Comment struct {
@@ -75,6 +46,7 @@ type CommentsContext struct {
 type Session struct {
 	UserId   int
 	Username string
+	Admin    bool
 	Expires  time.Time
 }
 

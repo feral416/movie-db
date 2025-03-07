@@ -67,3 +67,19 @@ func Auth(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+func Admin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		session, ok := r.Context().Value(movie.S).(movie.Session)
+		if !ok {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("No session in request context in admin middleware")
+			return
+		}
+		if !session.Admin {
+			http.Error(w, "Forbidden: no admin access!", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
