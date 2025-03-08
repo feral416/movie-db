@@ -32,7 +32,6 @@
         <div class="collapse navbar-collapse" id="navbarCollapse">
           <ul class="navbar-nav me-auto mb-2 mb-md-0">
             <li class="nav-item"><a class="nav-link" href="/movies">Catalog</a></li>
-            <li class="nav-item"><a class="nav-link" href="/movie/add">Add movie</a></li>
           </ul>
           <ul class="navbar-nav ms-auto mb-2 mb-md-0 auth-container" hx-get="/user/userinfo" hx-trigger="load" hx-swap="innerHTML">          
           </ul>
@@ -68,14 +67,18 @@
       {{ end }}
     {{ end }}
   </ul>
-  <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-section" hx-target-error="#movie-actions-errors"
-          hx-confirm="Are you sure?" class="btn btn-primary m-1">
-          Delete
-  </button>
-  <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-edit-form" hx-target-error="#movie-actions-errors"
-          hx-swap="innerHTML" class="btn btn-primary m-1">
-          Edit
-  </button>
+  {{ if .Session}}
+    {{ if .Session.Admin}}
+      <button hx-delete="/movie/{{ .Movie.ID }}" hx-target="#movie-section" hx-target-error="#movie-actions-errors"
+              hx-confirm="Are you sure?" class="btn btn-primary m-1">
+              Delete
+      </button>
+      <button hx-get="/movie/edit/{{ .Movie.ID }}" hx-target="#movie-edit-form" hx-target-error="#movie-actions-errors"
+              hx-swap="innerHTML" class="btn btn-primary m-1">
+              Edit
+      </button>
+    {{ end}}
+  {{ end }}
   <div id="movie-edit-form">
   </div>
   <p id="movie-actions-errors"></p>
@@ -252,7 +255,10 @@
 {{ block "auth-block" . }}
   {{ if not . }}
     <li class="nav-item"><a class="nav-link" href="/login">Login</a></li>
-  {{ else }} 
+  {{ else }}
+    {{ if .Admin }}
+      <li class="nav-item"><a class="nav-link" href="/admin/movie/add">Add movie</a></li>
+    {{ end }} 
     <li class="nav-item"><a class="nav-link" href="/user/{{ .UserId }}">{{ .Username }}</a></li>
     <li class="nav-item"><a class="nav-link" hx-post="/auth/user/logout">Logout</a></li>
   {{ end }}
@@ -314,6 +320,17 @@
     <p>Registration date: {{ .RegisterDate }}</p>
     {{ if .Banned }}
       <p>Banned Until: {{ .BanUntil }}</p>
+    {{ end }}
+    {{ if .Session }}
+      {{ if .Session.Admin}}
+        <form hx-post="/admin/user/ban" hx-target-error="#ban-user-errors" hx-vals='{"userId":{{ .Id }}}'>
+          <label for="banPicker">Set time until user will be banned</label>
+          <input type="datetime-local" name="banUntil" value="{{ .TimeNow }}" id="banPicker" required/>
+          <button type="submit">Ban</button>
+        </form>
+        <button hx-post="/admin/user/ban" hx-target-error="#ban-user-errors" hx-vals='{"userId":{{ .Id }}, "banUntil":"unban"}'>Unban</button>
+        <p id="ban-user-errors"></p>
+      {{ end }}
     {{ end }}
   </section>
 {{ end }}

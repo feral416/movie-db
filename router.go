@@ -33,7 +33,6 @@ func loadRoutes(router *http.ServeMux) {
 	public.HandleFunc(`POST /movies/`, handler.GetAllMoviesHTMX)
 	public.HandleFunc(`POST /movies/reload`, handler.RealodSearchCatalog)
 	public.HandleFunc("GET /movie/poster/{id}", handler.GetPoster)
-	public.HandleFunc("DELETE /movie/{id}", handler.DeleteMovie)
 	public.HandleFunc("GET /movie/{id}/comments/{last_comment_id}", handler.GetComments)
 	public.HandleFunc("GET /movie/comment/{commentId}", handler.GetComment)
 	public.HandleFunc("POST /search", handler.SearchByTitle)
@@ -58,6 +57,8 @@ func loadRoutes(router *http.ServeMux) {
 	admin.HandleFunc("GET /movie/edit/{id}", handler.GetEditMovieForm)
 	admin.HandleFunc("PUT /movie/{id}", handler.UpdateMovie)
 	admin.HandleFunc("PUT /movie/poster/{id}", handler.UpdatePoster)
+	admin.HandleFunc("DELETE /movie/{id}", handler.DeleteMovie)
+	admin.HandleFunc("POST /user/ban", handler.BanUser)
 	//combining all routes
 	router.Handle("/", publicStack(public))
 	router.Handle("/auth/", http.StripPrefix("/auth", protectedStack(protected)))

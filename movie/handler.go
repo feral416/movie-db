@@ -45,9 +45,10 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 	}
 
 	context := &struct {
-		Movie  *Movie
-		Genres []string
-	}{Movie: movie, Genres: movie.SplitGenresString()}
+		Movie   *Movie
+		Genres  []string
+		Session *Session
+	}{Movie: movie, Genres: movie.SplitGenresString(), Session: Sessions.GetSessionInfo(r)}
 
 	if err = utils.TemplateWrap(tmpl, w, contentName, context, wrapperName, nil); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -369,7 +370,11 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	session := Session{user.Id, username, user.Admin, time.Now().Add(time.Hour * 24)}
-	Sessions.Create(session, token)
+	if err := SM.Create(session, token); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error creating a session: %s", err)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    token,
@@ -399,7 +404,11 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error getting cookie: %s", err)
 		return
 	}
-	Sessions.Delete(cookie.Value)
+	if err := SM.Delete(cookie.Value); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error deleteing a session: %s", err)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    "",
@@ -773,10 +782,50 @@ func (h *Handler) GetUserPage(w http.ResponseWriter, r *http.Request) {
 		user.Banned = true
 		user.BanUntil = banUntil.Format(time.DateTime)
 	}
+	context := struct {
+		*User
+		Session *Session
+		TimeNow string
+	}{User: user, Session: Sessions.GetSessionInfo(r), TimeNow: time.Now().Format(time.DateTime)}
 	user.RegisterDate = registerDate.Format(time.DateTime)
-	if err := utils.TemplateWrap(tmpl, w, contentName, user, wrapperName, nil); err != nil {
+	if err := utils.TemplateWrap(tmpl, w, contentName, context, wrapperName, nil); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
+}
+
+func (h *Handler) BanUser(w http.ResponseWriter, r *http.Request) {
+	const layout string = "2006-01-02T15:04:05"
+	userIdStr := r.PostFormValue("userId")
+	userId, err := strconv.Atoi(userIdStr)
+	if err != nil || userId < 0 {
+		http.Error(w, "Wrong user id!", http.StatusBadRequest)
+		return
+	}
+	banUntilStr := r.PostFormValue("banUntil")
+	var banUntil time.Time
+	if banUntilStr != "unban" {
+		var err error
+		banUntil, err = time.Parse(layout, banUntilStr)
+		if err != nil {
+			http.Error(w, "Wrong date format for ban user!", http.StatusBadRequest)
+			return
+		}
+	}
+	query := `UPDATE users SET banUntil = ? WHERE userId = ?`
+	result, err := db.DB.Exec(query, banUntil.Format(layout), userId)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error while banning user: %s", err)
+		return
+	}
+	if n, _ := result.RowsAffected(); n == 0 {
+		http.Error(w, "User not found!", http.StatusBadRequest)
+		return
+	}
+	if banUntil.After(time.Now()) {
+		SM.KickUser(userId)
+	}
+	w.Header().Add("HX-Redirect", "/user/"+userIdStr)
 }

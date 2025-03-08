@@ -13,8 +13,7 @@ func Connect() (err error) {
 	//TODO: move confidential to env!
 	DB, err = sql.Open("mysql", "user:user@(localhost:3306)/movies?parseTime=true&loc=Local")
 	if err != nil {
-		log.Printf("Error openig connection to db: %s", err)
-		return err
+		log.Panicf("Error openig connection to db: %s", err)
 	}
 	err = DB.Ping()
 	if err != nil {
