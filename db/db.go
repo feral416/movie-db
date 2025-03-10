@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"log"
+	"os"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -10,8 +11,13 @@ import (
 var DB *sql.DB
 
 func Connect() (err error) {
-	//TODO: move confidential to env!
-	DB, err = sql.Open("mysql", "user:user@(localhost:3306)/movies?parseTime=true&loc=Local")
+	username := os.Getenv("MOVIE_DB_USER")
+	pwd := os.Getenv("MOVIE_DB_PWD")
+	dbAddr := os.Getenv("MYSQL_DB_ADDR")
+	if username == "" || pwd == "" || dbAddr == "" {
+		log.Fatalf("Environment variables for db are not set: username:%s pwd:%s dbAddr:%s", username, pwd, dbAddr)
+	}
+	DB, err = sql.Open("mysql", username+`:`+pwd+`@(`+dbAddr+`)/movies?parseTime=true&loc=Local`)
 	if err != nil {
 		log.Panicf("Error openig connection to db: %s", err)
 	}

@@ -10,6 +10,9 @@ body {
     Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   font-size: 10px;
   width: 100%;
+  color-scheme: dark;
+  color: white;
+  background: #333;
 }
 
 a {
@@ -340,7 +343,7 @@ table {
   color: greenyellow;
 }
 
-
+/*
 @media (prefers-color-scheme: dark) {
   html {
     color-scheme: dark;
@@ -349,7 +352,7 @@ table {
     color: white;
     background: #333;
   }
-}
+} */
 
 @media screen and (max-width: 1024px) {
   html {
