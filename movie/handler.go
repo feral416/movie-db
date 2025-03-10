@@ -572,12 +572,14 @@ func (h *Handler) GetComments(w http.ResponseWriter, r *http.Request) {
 	}()
 	for rows.Next() {
 		comment := &CommentsContext{}
-		err := rows.Scan(&comment.CommentText, &comment.PostedDT, &comment.UserId, &comment.CommentId, &comment.Username)
+		var postedDT time.Time
+		err := rows.Scan(&comment.CommentText, &postedDT, &comment.UserId, &comment.CommentId, &comment.Username)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			log.Printf("Error scanning a row: %s", err)
 			return
 		}
+		comment.PostedDT = postedDT.Format(time.DateTime)
 		if session != nil {
 			comment.Owner = (session.UserId == comment.UserId) || session.Admin
 		}
