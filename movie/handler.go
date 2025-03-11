@@ -21,10 +21,63 @@ var tmpl = template.Must(template.ParseGlob("views/*.html"))
 type Handler struct{}
 
 func (h *Handler) GetIndex(w http.ResponseWriter, r *http.Request) {
-	const templateName string = "index"
-	if err := tmpl.ExecuteTemplate(w, templateName, nil); err != nil {
+	const wrapperName, contentName string = "index", "home-content"
+	const numOfRecords int = 20
+	query := `CALL GetLatestMovies(?)`
+	rowsMovies, err := db.DB.Query(query, numOfRecords)
+	if err != nil && err != sql.ErrNoRows {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		log.Printf("Error executing template %s: %s", templateName, err)
+		log.Printf("Error retrieving latest movies from the db: %s", err)
+		return
+	}
+	movies := []Movie{}
+	defer rowsMovies.Close()
+	for rowsMovies.Next() {
+		var movie Movie
+		err := rowsMovies.Scan(&movie.ID, &movie.Title, &movie.Rating)
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Error while scanning a row: %s", err)
+			return
+		}
+		movies = append(movies, movie)
+	}
+	query = `CALL GetLatestComments(?)`
+	rowsComments, err := db.DB.Query(query, numOfRecords)
+	if err != nil && err != sql.ErrNoRows {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error retrieving latest comments from the db: %s", err)
+		return
+	}
+	comments := []struct {
+		Comment Comment
+		Movie   Movie
+	}{}
+	defer rowsComments.Close()
+	for rowsComments.Next() {
+		var comment Comment
+		var movie Movie
+		err := rowsComments.Scan(&comment.CommentId, &comment.CommentText, &movie.ID, &movie.Title)
+		if err != nil {
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			log.Printf("Error while scanning a row: %s", err)
+			return
+		}
+		comments = append(comments, struct {
+			Comment Comment
+			Movie   Movie
+		}{comment, movie})
+	}
+	contentCtx := struct {
+		Movies   []Movie
+		Comments []struct {
+			Comment Comment
+			Movie   Movie
+		}
+	}{movies, comments}
+	if err := utils.TemplateWrap(tmpl, w, contentName, contentCtx, wrapperName, nil); err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error wrapping template %s with template %s: %s", contentName, wrapperName, err)
 		return
 	}
 }

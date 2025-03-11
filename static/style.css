@@ -37,6 +37,8 @@ input, label, option, select {
 }
 
 nav {
+  position: sticky;
+  top: 0;
   background-color: black;
   padding: 1rem;
   display: flex;
@@ -346,6 +348,27 @@ table {
 #connected:before {
   content: "⬤";
   color: greenyellow;
+}
+
+#home-content {
+  display: flex;
+  flex-direction: row;
+  ul {
+    list-style: none;
+    padding: 0;
+  }
+  li {
+    display: flex;
+    flex-direction: row;
+  }
+  p {
+    margin: 0;
+    padding: 0.5rem;
+  }
+  h3 {
+    margin: 0;
+    padding: 0.5rem;
+  }
 }
 
 /*

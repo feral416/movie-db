@@ -80,6 +80,73 @@ BEGIN
 END//
 DELIMITER ;
 
+-- Dumping structure for procedure movies.GetLatestComments
+DELIMITER //
+CREATE PROCEDURE `GetLatestComments`(
+	IN `n` INT
+)
+BEGIN
+	SELECT 
+		c.commentId,
+		c.comment,
+		m.movieId,
+		m.title
+	FROM comments c
+	JOIN movies m ON c.movieId = m.movieId
+	ORDER BY commentId DESC
+	LIMIT n;
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure movies.GetLatestMovies
+DELIMITER //
+CREATE PROCEDURE `GetLatestMovies`(
+	IN `n` INT
+)
+BEGIN
+	SELECT 
+		m.movieId, 
+		m.title, 
+		IFNULL(AVG(r.rating), 0) 
+	FROM movies m 
+	LEFT JOIN movierating r ON m.movieId = r.movieId 
+	GROUP BY m.movieId
+	ORDER BY m.movieId DESC
+	LIMIT n;
+END//
+DELIMITER ;
+
+-- Dumping structure for procedure movies.GetMovie
+DELIMITER //
+CREATE PROCEDURE `GetMovie`(
+	IN `movieId` INT
+)
+BEGIN
+	SELECT
+		m.movieId,
+		m.title,
+		m.genres,
+		IFNULL(AVG(r.rating), 0) AS avgRating,
+		COUNT(r.rating) AS nRatings
+	FROM movies m
+	LEFT JOIN movierating r ON r.movieId = m.movieId
+	WHERE m.movieId = movieId
+	GROUP BY m.movieId;
+END//
+DELIMITER ;
+
+-- Dumping structure for table movies.movierating
+CREATE TABLE IF NOT EXISTS `movierating` (
+  `userId` int unsigned NOT NULL,
+  `movieId` int unsigned NOT NULL,
+  `rating` decimal(2,1) unsigned NOT NULL DEFAULT '0.0',
+  `timeStamp` datetime NOT NULL DEFAULT (now()),
+  UNIQUE KEY `userId_movieId` (`userId`,`movieId`) USING BTREE,
+  KEY `movieId_rating` (`movieId`,`rating`) USING BTREE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Data exporting was unselected.
+
 -- Dumping structure for table movies.movies
 CREATE TABLE IF NOT EXISTS `movies` (
   `movieId` int unsigned NOT NULL AUTO_INCREMENT,
@@ -91,7 +158,7 @@ CREATE TABLE IF NOT EXISTS `movies` (
   UNIQUE KEY `movieId_UNIQUE` (`movieId`),
   KEY `userId` (`adderUserId`),
   CONSTRAINT `userId` FOREIGN KEY (`adderUserId`) REFERENCES `users` (`userId`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=209178 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=209179 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 
