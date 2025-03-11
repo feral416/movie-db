@@ -50,6 +50,7 @@ func loadRoutes(router *http.ServeMux) {
 	protected.HandleFunc("GET /comment/edit/{commentId}", handler.GetCommentEditForm)
 	protected.HandleFunc("PUT /comment/edit", handler.UpdateComment)
 	protected.HandleFunc("DELETE /comment/delete/{commentId}", handler.DeleteComment)
+	protected.HandleFunc("POST /movie/rate", handler.PostRateMovie)
 	//admin routes
 	admin := http.NewServeMux()
 	admin.HandleFunc("GET /movie/add", handler.AddMoviePage)

@@ -31,9 +31,14 @@ func (h *Handler) GetIndex(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 	const wrapperName, contentName string = "index", "movie"
-	query := `SELECT movieId, title, genres FROM movies WHERE movieId = ?`
+	id, err := strconv.Atoi(r.PathValue("id"))
+	if err != nil || id < 0 {
+		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
+		return
+	}
+	query := `CALL GetMovie(?)`
 	movie := &Movie{}
-	err := db.DB.QueryRow(query, r.PathValue("id")).Scan(&movie.ID, &movie.Title, &movie.Genres)
+	err = db.DB.QueryRow(query, id).Scan(&movie.ID, &movie.Title, &movie.Genres, &movie.Rating, &movie.NumOfRatings)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Movie doesn't exist!", http.StatusNotFound)
@@ -43,12 +48,19 @@ func (h *Handler) GetMovieByID(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Error getting movie: %s", err)
 		return
 	}
+	session := Sessions.GetSessionInfo(r)
+	var userRating float32
+	if session != nil {
+		query = `SELECT rating FROM movierating WHERE userId = ? AND movieId = ?`
+		db.DB.QueryRow(query, session.UserId, id).Scan(&userRating)
+	}
 
 	context := &struct {
-		Movie   *Movie
-		Genres  []string
-		Session *Session
-	}{Movie: movie, Genres: movie.SplitGenresString(), Session: Sessions.GetSessionInfo(r)}
+		Movie      *Movie
+		Genres     []string
+		Session    *Session
+		UserRating float32
+	}{Movie: movie, Genres: movie.SplitGenresString(), Session: session, UserRating: userRating}
 
 	if err = utils.TemplateWrap(tmpl, w, contentName, context, wrapperName, nil); err != nil {
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -830,4 +842,32 @@ func (h *Handler) BanUser(w http.ResponseWriter, r *http.Request) {
 		SM.KickUser(userId)
 	}
 	w.Header().Add("HX-Redirect", "/user/"+userIdStr)
+}
+
+func (h *Handler) PostRateMovie(w http.ResponseWriter, r *http.Request) {
+	rating, err := strconv.ParseFloat(r.PostFormValue("user-rating"), 32)
+	if err != nil || rating < 0.0 || rating > 5.0 {
+		http.Error(w, "Wrong rating!", http.StatusBadRequest)
+		return
+	}
+	movieIdStr := r.PostFormValue("movieId")
+	movieId, err := strconv.Atoi(movieIdStr)
+	if err != nil || movieId < 0 {
+		http.Error(w, "Wrong movie id!", http.StatusBadRequest)
+		return
+	}
+	session, ok := r.Context().Value(S).(Session)
+	if !ok {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Unable to retrieve session from context in PostRateMovie")
+		return
+	}
+	query := `INSERT INTO movierating (userId, movieId, rating) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE rating = ?`
+	_, err = db.DB.Exec(query, session.UserId, movieId, rating, rating)
+	if err != nil {
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		log.Printf("Error inserting rating to db: %s", err)
+		return
+	}
+	w.Header().Add("HX-Redirect", "/movie/"+movieIdStr)
 }

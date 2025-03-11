@@ -48,13 +48,35 @@
 <section id="movie-section" class="movie container">
   <h2>{{.Movie.Title}}</h2>
   <img src="/movie/poster/{{ .Movie.ID }}">
-  <ul class="container-fluid list-group list-group-horizontal pb-2">
+  <ul class="">
     {{ range .Genres }}
       {{ block "film-genre" .}}
         <li class="list-group-item border border-primary rounded me-1">{{ . }}</li>
       {{ end }}
     {{ end }}
   </ul>
+  <p>Rating: 
+    <svg width="24" height="24" xmlns="http://www.w3.org/2000/svg" class="star-icon" viewBox="0 0 24 24" fill="currentColor" role="presentation">
+      <path d="M12 20.1l5.82 3.682c1.066.675 2.37-.322 2.09-1.584l-1.543-6.926 5.146-4.667c.94-.85.435-2.465-.799-2.567l-6.773-.602L13.29.89a1.38 1.38 0 0 0-2.581 0l-2.65 6.53-6.774.602C.052 8.126-.453 9.74.486 10.59l5.147 4.666-1.542 6.926c-.28 1.262 1.023 2.26 2.09 1.585L12 20.099z"></path>
+    </svg>
+    {{ .Movie.Rating }}/5.
+  </p>
+  <p>Number of user ratings: {{ .Movie.NumOfRatings }}.</p>
+  <p>Your rating: {{ .UserRating }}</p>
+  <form hx-post="/auth/movie/rate" hx-vals='{"movieId":{{ .Movie.ID }}}' hx-target-errors="rating-errors" hx-swap="innerHTML">
+    <label for="rating-selector">Rate the movie(between 0 and 5)</label>
+    <input id="rating-selector" type="range" name="user-rating" value="{{ .UserRating }}" min="0" max="5" step="0.1" list="rating-datalist">
+    <datalist id="rating-datalist">
+      <option value="0.0" label="0"></option>
+      <option value="1.0" label="1"></option>
+      <option value="2.0" label="2"></option>
+      <option value="3.0" label="3"></option>
+      <option value="4.0" label="4"></option>
+      <option value="5.0" label="5"></option>
+    </datalist>
+    <button type="submit">Rate</button>
+    <p id="rating-errors"></p>
+  </form>
   {{ if .Session}}
     {{ if .Session.Admin}}
       <button hx-delete="/admin/movie/{{ .Movie.ID }}" hx-target="#movie-section" hx-target-error="#movie-actions-errors"
@@ -261,7 +283,7 @@
     <form hx-post="/user/login" id="login-form" hx-target-error="#login-result" hx-swap="innerHTML">
       <div>
         <label for="username-field">Login</label>
-        <input type="text" name="username" id="username-field"  required/>
+        <input type="text" name="username" id="username-field" autofocus required/>
       </div>
       <div>
         <label for="password-field">Password</label>
@@ -283,7 +305,7 @@
     <form hx-post="/user/register" id="register-form" hx-target-error="#register-result" hx-swap="innerHTML">
       <div>
         <label for="username-field">Username</label>
-        <input type="text" name="username" id="username-field" required/>
+        <input type="text" name="username" id="username-field" autofocus required/>
       </div>
       <div>
         <label for="password-field">Password</label>

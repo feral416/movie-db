@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS `comments` (
   KEY `userId` (`userId`),
   CONSTRAINT `FK_comments_movies` FOREIGN KEY (`movieId`) REFERENCES `movies` (`movieId`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `FK_comments_users` FOREIGN KEY (`userId`) REFERENCES `users` (`userId`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=118 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=125 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 
@@ -91,7 +91,20 @@ CREATE TABLE IF NOT EXISTS `movies` (
   UNIQUE KEY `movieId_UNIQUE` (`movieId`),
   KEY `userId` (`adderUserId`),
   CONSTRAINT `userId` FOREIGN KEY (`adderUserId`) REFERENCES `users` (`userId`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=209177 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=209178 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Data exporting was unselected.
+
+-- Dumping structure for table movies.sessions
+CREATE TABLE IF NOT EXISTS `sessions` (
+  `token` varchar(64) NOT NULL,
+  `expirationDT` datetime NOT NULL,
+  `userId` int unsigned NOT NULL DEFAULT (0),
+  PRIMARY KEY (`token`),
+  UNIQUE KEY `token` (`token`),
+  KEY `userId` (`userId`),
+  CONSTRAINT `userIdFK` FOREIGN KEY (`userId`) REFERENCES `users` (`userId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 

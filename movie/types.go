@@ -19,9 +19,11 @@ var Sessions *SessionsStore
 var SM *SessionManager
 
 type Movie struct {
-	ID     int    `json:"id"`
-	Title  string `json:"title"`
-	Genres string //`json:"genres"`
+	ID           int    `json:"id"`
+	Title        string `json:"title"`
+	Genres       string //`json:"genres"`
+	Rating       float32
+	NumOfRatings int
 }
 
 func (m *Movie) SplitGenresString() []string {
