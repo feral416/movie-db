@@ -63,7 +63,7 @@
         {{ range .Comments }}
           <li>
             <h3><a href="/movie/{{ .Movie.ID }}">{{ .Movie.Title }}</a></h3>
-            {{ template "comment" .Comment }}
+              <p>{{ .Comment.CommentText }} by <a href="/user/{{ .Comment.UserId }}">{{ .Comment.Username }}</a></p>
           </li>
         {{ end}}
       </ul>

@@ -57,7 +57,7 @@ func (h *Handler) GetIndex(w http.ResponseWriter, r *http.Request) {
 	for rowsComments.Next() {
 		var comment Comment
 		var movie Movie
-		err := rowsComments.Scan(&comment.CommentId, &comment.CommentText, &movie.ID, &movie.Title)
+		err := rowsComments.Scan(&comment.CommentId, &comment.CommentText, &comment.Username, &comment.UserId, &movie.ID, &movie.Title)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			log.Printf("Error while scanning a row: %s", err)
