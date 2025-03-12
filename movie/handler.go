@@ -343,7 +343,6 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 	username := r.PostFormValue("username")
 	password := r.PostFormValue("password")
 	confirmPassword := r.PostFormValue("confirmPassword")
-	const passwordMinLength, passwordMaxLength = 8, 128
 	if username == "" || password == "" || confirmPassword == "" {
 		http.Error(w, "Username or password can't be empty!", http.StatusBadRequest)
 		return
@@ -352,7 +351,11 @@ func (h *Handler) PostRegister(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Passwords don't match!", http.StatusBadRequest)
 		return
 	}
-	if !utils.PasswordAnalysis(password, passwordMinLength, passwordMaxLength) {
+	if !utils.UsernameAnalysis(password) {
+		http.Error(w, "Username doesn't meet the requirements!", http.StatusBadRequest)
+		return
+	}
+	if !utils.PasswordAnalysis(password) {
 		http.Error(w, "Password doesn't meet the requirements!", http.StatusBadRequest)
 		return
 	}

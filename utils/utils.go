@@ -5,8 +5,8 @@ import (
 	"encoding/base64"
 	"html/template"
 	"io"
+	"regexp"
 	"strings"
-	"unicode"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -37,36 +37,16 @@ func HashPassword(password string) (string, error) {
 }
 
 // PasswordAnalysis returns if the password meets the requirements
-func PasswordAnalysis(password string, minLength int, maxLength int) bool {
-	var hasUpperCase, hasLoverCase, hasDigits, hasSpecialChars bool
-	//since only ascii characters are allowed checking len in bytes
-	pwdLen := len(password)
-	if pwdLen < minLength {
-		return false
-	} else if pwdLen > maxLength {
-		return false
-	}
-	for _, char := range password {
-		switch {
-		// only ascii characters are allowed
-		case char > 127:
-			return false
-		case unicode.IsSpace(char):
-			return false
-		case !hasUpperCase && unicode.IsUpper(char):
-			hasUpperCase = true
-		case !hasLoverCase && unicode.IsLower(char):
-			hasLoverCase = true
-		case !hasDigits && unicode.IsDigit(char):
-			hasDigits = true
-		case !hasSpecialChars && unicode.IsPunct(char):
-			hasSpecialChars = true
-		}
-		if hasUpperCase && hasDigits && hasSpecialChars && hasLoverCase {
-			return true
-		}
-	}
-	return false
+func PasswordAnalysis(password string) bool {
+	const minLen, maxLen string = "8", "128"
+	validPassword := regexp.MustCompile(`^[\x20-\x7E]{` + minLen + `,` + maxLen + `}$`)
+	return validPassword.MatchString(password)
+}
+
+func UsernameAnalysis(username string) bool {
+	const minLen, maxLen string = "3", "32"
+	validUsername := regexp.MustCompile(`^[a-zA-Z0-9_.-]{` + minLen + `,` + maxLen + `}$`)
+	return validUsername.MatchString(username)
 }
 
 // Generate secure token for session

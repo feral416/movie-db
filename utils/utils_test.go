@@ -47,25 +47,23 @@ func BenchmarkHashPassword(b *testing.B) {
 
 func TestPasswordAnalysis(t *testing.T) {
 	type args struct {
-		password  string
-		minLength int
-		maxLength int
+		password string
 	}
 	tests := []struct {
 		name string
 		args args
 		want bool
 	}{
-		{name: "Test 1", args: args{password: "password", minLength: 8, maxLength: 128}, want: false},
-		{name: "Test 2", args: args{password: "random", minLength: 8, maxLength: 128}, want: false},
-		{name: "Test 3", args: args{password: "BullShit8373", minLength: 8, maxLength: 128}, want: false},
-		{name: "Test 4", args: args{password: "Whatever98367_", minLength: 8, maxLength: 128}, want: true},
-		{name: "Test 5", args: args{password: "H_))eroku88G,,GG", minLength: 8, maxLength: 128}, want: true},
+		{name: "Test 1", args: args{password: "password"}, want: false},
+		{name: "Test 2", args: args{password: "random"}, want: false},
+		{name: "Test 3", args: args{password: "BullShit8373"}, want: false},
+		{name: "Test 4", args: args{password: "Whatever98367_"}, want: true},
+		{name: "Test 5", args: args{password: "H_))eroku88G,,GG"}, want: true},
 		{name: "Test 6", args: args{password: "GolangIsTheBasdfalhsdfh;lasdlfas;dlkfaslk;dfas;dfasdfasdfa;svcamsd,fa,smdnfasdfasdjfalskdfaskdflkjasdkfjhasdhfasdfhjlasestasdfac39asdf2349798jksdfvskjl", minLength: 8, maxLength: 128}, want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := PasswordAnalysis(tt.args.password, tt.args.minLength, tt.args.maxLength); got != tt.want {
+			if got := PasswordAnalysis(tt.args.password); got != tt.want {
 				t.Errorf("PasswordAnalysis() = %v, want %v", got, tt.want)
 			}
 		})
