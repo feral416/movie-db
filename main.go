@@ -41,7 +41,6 @@ func server() {
 	if err != nil {
 		log.Fatalf("HTTP server failed: %v", err)
 	}
-
 }
 
 func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {

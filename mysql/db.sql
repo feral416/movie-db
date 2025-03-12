@@ -89,10 +89,13 @@ BEGIN
 	SELECT 
 		c.commentId,
 		c.comment,
+		u.username,
+		u.userId,
 		m.movieId,
 		m.title
 	FROM comments c
 	JOIN movies m ON c.movieId = m.movieId
+	JOIN users u ON c.userId = u.userId
 	ORDER BY commentId DESC
 	LIMIT n;
 END//
@@ -158,7 +161,7 @@ CREATE TABLE IF NOT EXISTS `movies` (
   UNIQUE KEY `movieId_UNIQUE` (`movieId`),
   KEY `userId` (`adderUserId`),
   CONSTRAINT `userId` FOREIGN KEY (`adderUserId`) REFERENCES `users` (`userId`) ON DELETE SET NULL ON UPDATE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=209179 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=209180 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 

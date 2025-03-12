@@ -773,6 +773,7 @@ func (h *Handler) GetAllMoviesHTMX(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Error while scanning a row: %s", err)
 			return
 		}
+		movie.Movie.Genres = movie.Movie.GenresComaSeparated()
 		Movies = append(Movies, *movie)
 	}
 

@@ -30,6 +30,10 @@ func (m *Movie) SplitGenresString() []string {
 	return strings.Split(m.Genres, "|")
 }
 
+func (m *Movie) GenresComaSeparated() string {
+	return strings.ReplaceAll(m.Genres, "|", ", ")
+}
+
 /*func (m *Movie) PackGenresToString(elems []string) string {
 	return strings.Join(elems, "|")
 }*/

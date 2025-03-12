@@ -353,6 +353,8 @@ table {
 #home-content {
   display: flex;
   flex-direction: row;
+  justify-content: space-evenly;
+  flex-wrap: wrap; 
   ul {
     list-style: none;
     padding: 0;
