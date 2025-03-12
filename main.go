@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"log"
 	"movie_db/db"
 	"movie_db/movie"
@@ -9,16 +10,44 @@ import (
 )
 
 func server() {
-	const port string = "8080"
+	const httpsPort string = "443"
+	const httpPort string = "80"
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
 	router := http.NewServeMux()
 	loadRoutes(router)
-	server := http.Server{
-		Addr:    ":" + port,
-		Handler: router,
+	httpsServer := http.Server{
+		Addr:      ":" + httpsPort,
+		Handler:   router,
+		TLSConfig: tlsConfig,
 	}
-	log.Printf("Server listening on port: %s", port)
-	server.ListenAndServe()
+	//HTTP server for redirection to https
+	httpMux := http.NewServeMux()
+	httpMux.HandleFunc("/", redirectToHTTPS)
+	httpServer := http.Server{
+		Addr:    ":" + httpPort,
+		Handler: http.Handler(httpMux),
+	}
+	go func() {
+		log.Printf("HTTPS server listening on port: %s", httpsPort)
+		err := httpsServer.ListenAndServeTLS("cert.pem", "key.pem")
+		if err != nil {
+			log.Fatalf("HTTPS server failed: %v", err)
+		}
+	}()
+	log.Printf("HTTP server listening on port: %s", httpPort)
+	err := httpServer.ListenAndServe()
+	if err != nil {
+		log.Fatalf("HTTP server failed: %v", err)
+	}
 
+}
+
+func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
+	target := "https://" + r.Host + r.URL.String()
+	w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	http.Redirect(w, r, target, http.StatusMovedPermanently)
 }
 
 func hourly() {

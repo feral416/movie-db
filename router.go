@@ -8,18 +8,15 @@ import (
 
 // Main router aggregator
 func loadRoutes(router *http.ServeMux) {
-	protectedStack := middleware.CreateStack(
-		middleware.Logging,
-		middleware.Auth,
-	)
-
 	publicStack := middleware.CreateStack(
 		middleware.Logging,
 	)
-
-	adminStack := middleware.CreateStack(
-		middleware.Logging,
+	protectedStack := middleware.CreateStack(
+		publicStack,
 		middleware.Auth,
+	)
+	adminStack := middleware.CreateStack(
+		protectedStack,
 		middleware.Admin,
 	)
 

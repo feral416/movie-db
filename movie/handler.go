@@ -445,7 +445,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		Value:    token,
 		Expires:  session.Expires,
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
@@ -479,7 +479,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Expires:  time.Now().Add(-time.Hour),
 		HttpOnly: true,
-		Secure:   false,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 		Path:     "/",
 	})
