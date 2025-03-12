@@ -7,6 +7,7 @@ import (
 	"io"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -39,9 +40,10 @@ func HashPassword(password string) (string, error) {
 // PasswordAnalysis returns if the password meets the requirements
 func PasswordAnalysis(password string, minLength int, maxLength int) bool {
 	var hasUpperCase, hasLoverCase, hasDigits, hasSpecialChars bool
-	if len(password) < minLength {
+	pwdLen := utf8.RuneCountInString(password)
+	if pwdLen < minLength {
 		return false
-	} else if len(password) > maxLength {
+	} else if pwdLen > maxLength {
 		return false
 	}
 	for _, char := range password {
