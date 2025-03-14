@@ -51,11 +51,12 @@ func redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
 
 func hourly() {
 	go func() {
+		t := time.NewTicker(time.Hour)
 		for {
 			if err := movie.SM.Shrink(); err != nil {
 				log.Printf("Error shrinking sessions: %s", err)
 			}
-			time.Sleep(time.Hour)
+			<-t.C
 		}
 	}()
 }
